@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DIN Alternate", "Bahnschrift", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --color-hud: #d9dbcf;
+  --color-hud-dim: #8d9184;
+  --color-accent: #a9bf8e;
+  --color-warn: #d9a441;
+  --color-danger: #c9503e;
+}
+
+html, body, #root { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; }
+body { font-family: var(--font-sans); color: var(--color-hud); user-select: none; -webkit-font-smoothing: antialiased; }
+
+/* Readable over bright skies without heavy boxes: soft dark shadow on text and thin lines. */
+.hud-text { text-shadow: 0 1px 2px rgb(0 0 0 / 0.85), 0 0 8px rgb(0 0 0 / 0.35); }
+.hud-label { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--color-hud-dim); }
+.hud-panel {
+  background: linear-gradient(180deg, rgb(10 12 10 / 0.55), rgb(10 12 10 / 0.32));
+  border: 1px solid rgb(217 219 207 / 0.12);
+}
+.panel {
+  background: linear-gradient(180deg, rgb(12 14 12 / 0.82), rgb(8 10 9 / 0.74));
+  border: 1px solid rgb(217 219 207 / 0.14);
+  backdrop-filter: blur(3px);
+}
+.tnum { font-variant-numeric: tabular-nums; }
+@keyframes hud-blink { 50% { opacity: 0.35 } }
+.blink { animation: hud-blink 1.2s steps(2, start) infinite; }
