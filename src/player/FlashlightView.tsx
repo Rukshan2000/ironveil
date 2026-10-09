@@ -15,7 +15,7 @@ export function FlashlightView({ session }: { session: GameSession }) {
   useFrame(({ camera }) => {
     const l = light.current!
     const on = session.player.flashlight && session.player.active
-    l.intensity = on ? 60 : 0
+    l.intensity = on ? 220 : 0
     camera.getWorldDirection(fwd)
     l.position.copy(camera.position).addScaledVector(fwd, 0.3).add({ x: 0, y: -0.15, z: 0 })
     target.position.copy(camera.position).addScaledVector(fwd, 10)
@@ -23,7 +23,7 @@ export function FlashlightView({ session }: { session: GameSession }) {
   })
   return (
     <>
-      <spotLight ref={light} color="#fff4e0" distance={38} angle={0.42} penumbra={0.55} decay={1.4} intensity={0} />
+      <spotLight ref={light} color="#fff4e0" distance={60} angle={0.38} penumbra={0.45} decay={1.25} intensity={0} />
       <primitive object={target} />
     </>
   )
