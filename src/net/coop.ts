@@ -1,4 +1,4 @@
-import Peer, { type DataConnection } from 'peerjs'
+import Peer, { type DataConnection, type MediaConnection } from 'peerjs'
 import { Vector3 } from 'three'
 import { audio } from '../audio/AudioSystem'
 import { damageGuard, GUARD_DAMAGE, placeGuard } from '../enemies/guards'
@@ -24,8 +24,20 @@ type Msg =
   | { t: 'gshot'; i: number; m: number[]; d: number[] }
   | { t: 'dmg'; i: number; a: number; d: number[]; torso: boolean }
   | { t: 'obj'; e: MissionEvent }
+  | { t: 'full' }
+  | { t: 'chat'; text: string }
+  | { t: 'hangup' }
 
 export type CoopStatus = 'off' | 'hosting' | 'joining' | 'connected'
+/** Voice call: `calling` = we rang and wait for the friend to pick up, `ringing` = the friend is ringing us. */
+export type VoiceState = 'off' | 'calling' | 'ringing' | 'on'
+export interface ChatLine {
+  id: number
+  mine: boolean
+  text: string
+  at: number
+}
+let chatId = 0
 const PREFIX = 'ironveil-'
 const STATE_RATE = 1 / 20
 const GUARD_RATE = 1 / 15
@@ -88,8 +100,16 @@ class Coop {
     return new Promise((resolve, reject) => {
       const peer = (this.peer = new Peer(PREFIX + code))
       peer.on('open', () => resolve(code))
+      peer.on('call', (c) => this.incoming(c))
       peer.on('connection', (c) => {
-        if (this.conn?.open) return c.close() // room is two players
+        // two players per room: anyone after the first (even mid-handshake) is told so and dropped
+        if (this.conn) {
+          c.on('open', () => {
+            c.send({ t: 'full' } satisfies Msg)
+            setTimeout(() => c.close(), 500)
+          })
+          return
+        }
         this.wire(c)
       })
       peer.on('error', (e) => {
@@ -104,11 +124,13 @@ class Coop {
     this.role = 'client'
     this.status('joining')
     const peer = (this.peer = new Peer())
+    peer.on('call', (c) => this.incoming(c))
     peer.on('open', () => this.wire(peer.connect(PREFIX + code.trim().toUpperCase(), { reliable: true })))
     peer.on('error', (e) => this.status('off', e.type === 'peer-unavailable' ? 'No room with that code' : e.message))
   }
 
   leave() {
+    this.hangup(false)
     this.conn?.close()
     this.peer?.destroy()
     this.conn = this.peer = null
@@ -125,6 +147,8 @@ class Coop {
     })
     c.on('data', (m) => this.receive(m as Msg))
     c.on('close', () => {
+      if (this.conn !== c) return // we left on purpose (or were turned away)
+      this.hangup(false)
       this.conn = null
       this.other.seen = false
       this.proxy?.collider.setEnabled(false)
@@ -228,7 +252,91 @@ class Coop {
     })
   }
 
+  // ---- chat & voice ------------------------------------------------------------------------------------
+
+  sendChat(text: string) {
+    text = text.trim().slice(0, 200)
+    if (!text || !this.connected) return
+    this.send({ t: 'chat', text })
+    this.addChat(true, text)
+  }
+
+  private addChat(mine: boolean, text: string) {
+    useGameStore.setState((st) => ({ chat: [...st.chat.slice(-30), { id: ++chatId, mine, text, at: performance.now() }] }))
+    if (!mine) audio.cue('objective')
+  }
+
+  private call: MediaConnection | null = null
+  private mic: MediaStream | null = null
+  private speaker: HTMLAudioElement | null = null
+
+  private voice(voice: VoiceState) {
+    useGameStore.setState({ voice })
+  }
+
+  /** T: ring the friend, pick up when they ring, or hang up. Must run from a key/click (mic prompt + audio playback). */
+  async toggleVoice() {
+    if (!this.connected || !this.peer) return
+    const state = useGameStore.getState().voice
+    if (state === 'calling' || state === 'on') return this.hangup(true)
+    try {
+      this.mic ??= await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+    } catch {
+      this.s?.notify('Microphone blocked — allow it in the browser to talk', 'warn')
+      return
+    }
+    if (state === 'ringing' && this.call) {
+      this.call.answer(this.mic)
+      this.voice('on')
+    } else {
+      this.listen(this.peer.call(this.conn!.peer, this.mic))
+      this.voice('calling')
+    }
+  }
+
+  private incoming(c: MediaConnection) {
+    // both pressed T at once: just pick up
+    if (useGameStore.getState().voice === 'calling' && this.mic) {
+      this.call?.close()
+      this.listen(c)
+      c.answer(this.mic)
+      return this.voice('on')
+    }
+    this.listen(c)
+    this.voice('ringing')
+    this.s?.notify('Friend is calling — press T to answer', 'good')
+    audio.cue('objective')
+  }
+
+  private listen(c: MediaConnection) {
+    this.call = c
+    c.on('stream', (remote) => {
+      this.speaker ??= new Audio()
+      this.speaker.srcObject = remote
+      this.speaker.play().catch(() => {})
+      this.voice('on')
+    })
+    c.on('close', () => this.call === c && this.hangup(false))
+  }
+
+  hangup(tell: boolean) {
+    if (tell) this.send({ t: 'hangup' })
+    const c = this.call
+    this.call = null
+    c?.close()
+    this.mic?.getTracks().forEach((t) => t.stop())
+    this.mic = null
+    if (this.speaker) this.speaker.srcObject = null
+    this.voice('off')
+  }
+
   private receive(m: Msg) {
+    if (m.t === 'full') {
+      this.leave()
+      return this.status('off', 'Room is full — 2 players max')
+    }
+    if (m.t === 'chat') return this.addChat(false, m.text)
+    if (m.t === 'hangup') return this.hangup(false)
     const s = this.s
     if (!s) return
     const o = this.other

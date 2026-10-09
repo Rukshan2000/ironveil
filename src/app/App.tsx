@@ -11,6 +11,7 @@ import { HUD } from '../ui/HUD'
 import { BriefingScreen, LoadingScreen, MainMenu, PauseScreen, ResultsScreen } from '../ui/Screens'
 import { TacticalMapOverlay } from '../ui/TacticalMap'
 import { IntroOverlay } from '../game/IntroCinematic'
+import { CoopChat } from '../ui/CoopChat'
 
 export function App() {
   const phase = useGameStore((s) => s.phase)
@@ -32,7 +33,8 @@ export function App() {
   useEffect(() => {
     const onLockChange = () => {
       const { phase, setPhase } = useGameStore.getState()
-      if (!document.pointerLockElement && phase === 'playing') setPhase('paused')
+      // typing in co-op chat frees the mouse without pausing (the friend's game keeps running)
+      if (!document.pointerLockElement && phase === 'playing' && !useGameStore.getState().chatOpen) setPhase('paused')
       if (document.pointerLockElement && phase === 'paused') setPhase('playing')
     }
     document.addEventListener('pointerlockchange', onLockChange)
@@ -46,6 +48,7 @@ export function App() {
       {session && phase === 'playing' && mapOpen && <TacticalMapOverlay />}
       {session && (phase === 'playing' || phase === 'paused') && validationOpen && <ValidationOverlay />}
       <DebugPanel />
+      <CoopChat />
       {phase === 'menu' && <MainMenu />}
       {phase === 'loading' && <LoadingScreen />}
       {phase === 'briefing' && <BriefingScreen />}

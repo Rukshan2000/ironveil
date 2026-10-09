@@ -12,7 +12,7 @@ export const NIGHTFALL: MissionDef = {
     'coded traffic we cannot read. Tonight a single operative — call sign WREN — goes in alone. No support until extraction. ' +
     'CANOPY will be your handler on this net.',
   intel: [
-    'Roughly sixteen guards on site, working in squads of two to four. A barracks in the south-east holds a reaction force.',
+    'Nineteen guards on site, working in squads of two to four. Raise the alarm and up to thirteen more come in from the barracks, the compound, the vehicle area and the south road.',
     'Security cameras cover the gate, the command building and the security compound. Alarm panels are wired — they work even if radios do not.',
     'The comms terminal sits in the communications building inside the walled security compound (north-east). The keycard for its gate is carried around the warehouse office.',
     'The uplink is fed from the power station on the east fence line. Kill the uplink transformer and the station goes deaf — and their squads lose long-range radio.',

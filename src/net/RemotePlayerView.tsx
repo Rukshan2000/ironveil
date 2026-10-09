@@ -1,18 +1,25 @@
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Group, Vector3 } from 'three'
+import { GltfSoldier, loadSoldier } from '../characters/GltfSoldier'
 import { SoldierRig } from '../characters/SoldierRig'
-import type { AnimState } from '../characters/types'
+import type { AnimState, CharacterRig } from '../characters/types'
 import type { GameSession } from '../game/GameSession'
 
-/** The co-op friend, drawn with the soldier rig and driven by the state they stream us. */
+/** The co-op friend: the rigged GLB soldier once it has downloaded, the procedural one until then (or offline). */
 export function RemotePlayerView({ session }: { session: GameSession }) {
-  const rig = useMemo(() => new SoldierRig(), [])
+  const [rig, setRig] = useState<CharacterRig>(() => new SoldierRig())
   const root = useRef<Group>(null)
   const anim = useMemo<AnimState>(() => ({
     speed: 0, crouch: 0, aim: 0, sinceShot: 99, reload: -1, radio: false, turnRate: 0, lookYaw: 0, sinceHit: 99,
     dead: false, sinceDeath: 0, deathDir: new Vector3(0, 0, 1), yaw: 0,
   }), [])
+  useEffect(() => {
+    let live = true
+    loadSoldier().then((g) => live && setRig(new GltfSoldier(g))).catch(() => {})
+    return () => { live = false }
+  }, [])
+  useEffect(() => () => rig.dispose(), [rig])
 
   useFrame((_, delta) => {
     const o = session.coop.other

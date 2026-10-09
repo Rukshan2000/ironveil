@@ -4,7 +4,7 @@ import type { DetectionLevel } from '../ai/perception'
 import type { RadioDisplay } from '../audio/RadioSystem'
 import type { ObjectiveStatus } from '../missions/ObjectiveManager'
 import type { MissionState } from '../missions/MissionSystem'
-import type { CoopStatus } from '../net/coop'
+import type { ChatLine, CoopStatus, VoiceState } from '../net/coop'
 import type { GameSession } from '../game/GameSession'
 import type { TimeOfDay } from '../world/environment'
 
@@ -142,6 +142,10 @@ interface GameStore {
   coopStatus: CoopStatus
   coopCode: string
   coopError: string
+  chat: ChatLine[]
+  /** Chat input is open (pointer lock released without pausing). */
+  chatOpen: boolean
+  voice: VoiceState
   setPhase: (phase: Phase) => void
   toggleDebug: () => void
   pushMessage: (text: string, tone?: Message['tone']) => void
@@ -170,6 +174,9 @@ export const useGameStore = create<GameStore>((set) => ({
   coopStatus: 'off',
   coopCode: '',
   coopError: '',
+  chat: [],
+  chatOpen: false,
+  voice: 'off',
   setPhase: (phase) => set({ phase }),
   toggleDebug: () => set((s) => ({ debug: !s.debug })),
   pushMessage: (text, tone = 'info') => {

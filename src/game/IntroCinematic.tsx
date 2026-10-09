@@ -17,7 +17,7 @@ const intro = { t: 0 }
 const CAPTIONS: { from: number; to: number; text: string; kind?: 'title' | 'radio' }[] = [
   { from: 0.8, to: 4.6, text: 'HALVARD RIDGE SIGNALS STATION', kind: 'title' },
   { from: 4.8, to: 8, text: 'For six weeks it has routed coded traffic we cannot read. Tonight, that ends.' },
-  { from: 8.5, to: 12.6, text: 'Sixteen guards. Cameras on the gate. Searchlights on both towers.' },
+  { from: 8.5, to: 12.6, text: 'Nineteen guards, more on call. Cameras on the gate. Searchlights on both towers.' },
   { from: 12.8, to: 17.6, text: 'The logs sit on a terminal inside the walled security compound. Pull them, then cut the uplink.' },
   { from: 18.4, to: 21.8, text: 'One operative. No support until extraction.' },
   { from: 22, to: 25, text: 'Call sign: WREN.', kind: 'title' },
