@@ -13,6 +13,7 @@ import { useGameStore } from '../state/gameStore'
 import { useSettings } from '../state/settings'
 import { GrenadeView } from '../weapons/GrenadeView'
 import { GameLoop } from './GameLoop'
+import { IntroCinematic } from './IntroCinematic'
 import { input } from './input'
 import { RenderPipeline } from './RenderPipeline'
 import type { GameSession } from './GameSession'
@@ -35,6 +36,7 @@ export function GameCanvas({ session }: { session: GameSession }) {
       {/* keyed so a restart remounts everything against the new session */}
       <Fragment key={session.id}>
         <GameLoop session={session} />
+        <IntroCinematic session={session} vm={vm} />
         <WorldView session={session} />
         <FlashlightView session={session} />
         <GuardsView session={session} />

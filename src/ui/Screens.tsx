@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { continueFromCheckpoint, deploy, openBriefing, quitToMenu, requestLock, restartMission } from '../app/actions'
+import { continueFromCheckpoint, playIntro, openBriefing, quitToMenu, requestLock, restartMission } from '../app/actions'
 import { loadCheckpoint } from '../missions/checkpoint'
 import { NIGHTFALL } from '../missions/nightfall'
 import { ALERT_LABELS, type AlertLevel } from '../security/AlertSystem'
@@ -106,7 +106,7 @@ export function BriefingScreen() {
             <div className="space-y-2">{m.approaches?.map((a) => <div key={a.name}><span className="text-warn">{a.name}.</span> {a.text}</div>)}</div>
           </Section>
           <div className="mt-6 flex gap-3">
-            <Button primary onClick={deploy}>DEPLOY</Button>
+            <Button primary onClick={playIntro}>DEPLOY</Button>
             <Button onClick={quitToMenu}>BACK</Button>
           </div>
         </div>

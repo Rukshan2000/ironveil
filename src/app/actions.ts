@@ -28,6 +28,11 @@ export async function openBriefing() {
   useGameStore.getState().setPhase('briefing')
 }
 
+/** Briefing → 30 s insertion cinematic (see IntroCinematic), which then calls deploy(). */
+export function playIntro() {
+  useGameStore.getState().setPhase('intro')
+}
+
 /** Briefing → insertion. Must run inside a click handler for pointer lock. */
 export function deploy() {
   const { session, setPhase } = useGameStore.getState()

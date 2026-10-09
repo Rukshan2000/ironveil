@@ -7,6 +7,19 @@ import type { GameSession } from '../game/GameSession'
 /** Extraction helicopter: simple utility-helo silhouette driven by the ExtractionSystem's flight path. */
 export function HelicopterView({ session }: { session: GameSession }) {
   const root = useRef<Group>(null)
+  useFrame(() => {
+    const x = session.extraction
+    const g = root.current!
+    g.visible = x.available || session.mission.state === 'SUCCESS'
+    if (!g.visible) return
+    g.position.copy(x.heliPos)
+    g.rotation.set(0, x.heliYaw, 0)
+  })
+  return <group ref={root} visible={false}><HeliModel /></group>
+}
+
+/** The helo mesh with spinning rotors, shared by extraction and the intro cinematic. Nose faces -Z. */
+export function HeliModel() {
   const rotor = useRef<Group>(null)
   const tail = useRef<Group>(null)
   const m = useMemo(() => ({
@@ -17,18 +30,12 @@ export function HelicopterView({ session }: { session: GameSession }) {
   }), [])
 
   useFrame((_, dt) => {
-    const x = session.extraction
-    const g = root.current!
-    g.visible = x.available || session.mission.state === 'SUCCESS'
-    if (!g.visible) return
-    g.position.copy(x.heliPos)
-    g.rotation.set(0, x.heliYaw, 0)
     rotor.current!.rotation.y += dt * 28
     tail.current!.rotation.x += dt * 40
   })
 
   return (
-    <group ref={root} visible={false}>
+    <group>
       <mesh material={m.body} position={[0, 1.2, 0]} castShadow><boxGeometry args={[2.0, 1.8, 4.2]} /></mesh>
       <mesh material={m.glass} position={[0, 1.4, -2.3]} rotation={[0.35, 0, 0]}><boxGeometry args={[1.8, 1.2, 0.8]} /></mesh>
       <mesh material={m.body} position={[0, 1.6, 4.6]} castShadow><boxGeometry args={[0.45, 0.5, 5.4]} /></mesh>

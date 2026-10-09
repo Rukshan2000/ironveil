@@ -13,32 +13,60 @@ function makeAssets() {
   const camo = getTextures('camo')
   const helmet = getTextures('paintedMetal')
   const fabric = getTextures('canvas')
+  const skinTones = ['#e0b896', '#c69474', '#9c7a60', '#6e4f3a', '#4a3426']
   return {
     uniform: litMaterial({ map: camo.map, normalMap: camo.normalMap, roughness: 0.95 }),
     vest: litMaterial({ color: '#4a4e3a', map: fabric.map, normalMap: fabric.normalMap, roughness: 0.9 }),
     helmet: litMaterial({ color: '#4c5238', map: helmet.map, roughnessMap: helmet.roughnessMap, roughness: 0.75 }),
-    skin: litMaterial({ color: '#9c7a60', roughness: 0.7 }),
+    skins: skinTones.map((color) => litMaterial({ color, roughness: 0.62 })),
+    hair: litMaterial({ color: '#2a2018', roughness: 0.9 }),
+    eye: litMaterial({ color: '#141210', roughness: 0.25 }),
     black: litMaterial({ color: '#1e1f1c', roughness: 0.85 }),
     gun: litMaterial({ color: '#25272a', roughness: 0.45, metalness: 0.6 }),
     gunFurniture: litMaterial({ color: '#33352c', roughness: 0.8 }),
     geo: {
-      limbUpper: new CapsuleGeometry(0.068, 0.3, 4, 8).translate(0, -0.2, 0),
-      limbLower: new CapsuleGeometry(0.058, 0.3, 4, 8).translate(0, -0.2, 0),
-      thigh: new CapsuleGeometry(0.085, 0.32, 4, 8).translate(0, -0.22, 0),
-      shin: new CapsuleGeometry(0.07, 0.34, 4, 8).translate(0, -0.22, 0),
-      boot: new BoxGeometry(0.13, 0.1, 0.27).translate(0, -0.05, -0.05),
-      hand: new BoxGeometry(0.08, 0.1, 0.06).translate(0, -0.05, 0),
-      pelvis: new BoxGeometry(0.34, 0.2, 0.22),
-      torso: new BoxGeometry(0.38, 0.46, 0.24).translate(0, 0.23, 0),
-      vest: new BoxGeometry(0.42, 0.36, 0.3).translate(0, 0.24, 0),
+      // head (face looks down -Z)
+      cranium: new SphereGeometry(0.1, 20, 16).scale(0.9, 1.08, 1),
+      jaw: new SphereGeometry(0.08, 16, 12).scale(0.92, 0.78, 1),
+      nose: new SphereGeometry(0.018, 8, 6).scale(0.85, 1.5, 1.15),
+      ear: new SphereGeometry(0.025, 8, 6).scale(0.4, 1, 0.7),
+      eye: new SphereGeometry(0.012, 8, 6),
+      brow: new BoxGeometry(0.034, 0.008, 0.012),
+      neck: new CylinderGeometry(0.05, 0.058, 0.12, 12),
+      helmet: new SphereGeometry(0.13, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.55).scale(1, 0.95, 1.08),
+      helmetBand: new CylinderGeometry(0.133, 0.133, 0.025, 20, 1, true).scale(1, 1, 1.08),
+      goggles: new BoxGeometry(0.15, 0.04, 0.04),
+      // torso
+      torso: new CapsuleGeometry(0.15, 0.2, 6, 16).scale(1.25, 1, 0.75).translate(0, 0.25, 0),
+      abdomen: new CapsuleGeometry(0.14, 0.1, 4, 12).scale(1.12, 1, 0.75),
+      pelvis: new CapsuleGeometry(0.13, 0.13, 4, 12).rotateZ(Math.PI / 2).scale(1, 1, 0.78),
+      belt: new CylinderGeometry(0.165, 0.165, 0.05, 16).scale(1.05, 1, 0.78),
+      vest: new BoxGeometry(0.4, 0.34, 0.29).translate(0, 0.25, 0),
+      strap: new BoxGeometry(0.06, 0.03, 0.27),
       pouch: new BoxGeometry(0.09, 0.12, 0.06),
-      head: new SphereGeometry(0.105, 12, 10),
-      helmet: new SphereGeometry(0.13, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
-      brim: new CylinderGeometry(0.14, 0.145, 0.03, 12),
-      neck: new CylinderGeometry(0.05, 0.055, 0.1, 8),
       pack: new BoxGeometry(0.3, 0.32, 0.14),
       radio: new BoxGeometry(0.07, 0.16, 0.05),
       antenna: new CylinderGeometry(0.004, 0.004, 0.35, 4),
+      // arms
+      deltoid: new SphereGeometry(0.075, 12, 10).scale(1, 1.1, 1),
+      upperArm: new CylinderGeometry(0.065, 0.052, 0.34, 12).translate(0, -0.18, 0),
+      elbow: new SphereGeometry(0.052, 10, 8),
+      forearm: new CylinderGeometry(0.056, 0.04, 0.32, 12).translate(0, -0.18, 0),
+      cuff: new CylinderGeometry(0.047, 0.047, 0.04, 10),
+      palm: new BoxGeometry(0.075, 0.085, 0.035).translate(0, -0.045, 0),
+      fingers: new BoxGeometry(0.07, 0.065, 0.03).translate(0, -0.03, 0),
+      thumb: new BoxGeometry(0.025, 0.05, 0.025),
+      // legs
+      thigh: new CylinderGeometry(0.095, 0.068, 0.44, 12).translate(0, -0.22, 0),
+      knee: new SphereGeometry(0.066, 10, 8),
+      kneePad: new BoxGeometry(0.1, 0.11, 0.04),
+      shin: new CylinderGeometry(0.068, 0.05, 0.38, 12).translate(0, -0.19, 0),
+      calf: new SphereGeometry(0.06, 10, 8).scale(1, 2, 0.95),
+      bootShaft: new CylinderGeometry(0.06, 0.064, 0.14, 12),
+      foot: new BoxGeometry(0.11, 0.08, 0.24).translate(0, 0, -0.04),
+      toe: new SphereGeometry(0.056, 10, 8).scale(1, 0.7, 1.1),
+      sole: new BoxGeometry(0.12, 0.025, 0.29).translate(0, 0, -0.05),
+      // rifle
       receiver: new BoxGeometry(0.05, 0.08, 0.42),
       barrel: new CylinderGeometry(0.012, 0.012, 0.32, 6).rotateX(Math.PI / 2),
       stock: new BoxGeometry(0.045, 0.1, 0.22),
@@ -146,26 +174,51 @@ export class SoldierRig implements CharacterRig {
     const rifle = joint(chest, [0.1, 0.3, -0.28])
     this.j = { hips: this.hips, spine, chest, neck, head, shoulderL, elbowL, shoulderR, elbowR, hipL, kneeL, hipR, kneeR, rifle }
 
+    const skin = a.skins[Math.floor(Math.random() * a.skins.length)]
     part(G.pelvis, a.uniform, this.hips)
+    part(G.belt, a.black, this.hips, [0, 0.08, 0])
+    part(G.abdomen, a.uniform, spine, [0, 0.08, 0])
     part(G.torso, a.uniform, chest)
     part(G.vest, a.vest, chest)
+    for (const x of [-0.11, 0.11]) part(G.strap, a.vest, chest, [x, 0.44, 0])
     for (const x of [-0.12, 0, 0.12]) part(G.pouch, a.vest, chest, [x, 0.16, -0.17], true)
     part(G.pack, a.vest, chest, [0, 0.26, 0.2], true)
     part(G.radio, a.black, chest, [-0.14, 0.42, 0.16], true)
     part(G.antenna, a.black, chest, [-0.15, 0.66, 0.17], true)
-    part(G.neck, a.skin, neck, [0, -0.02, 0])
-    part(G.head, a.skin, head, [0, 0.1, 0])
-    part(G.helmet, a.helmet, head, [0, 0.13, 0])
-    part(G.brim, a.helmet, head, [0, 0.13, 0])
-    for (const [s, k] of [[shoulderL, elbowL], [shoulderR, elbowR]] as const) {
-      part(G.limbUpper, a.uniform, s)
-      part(G.limbLower, a.uniform, k)
-      part(G.hand, a.black, k, [0, -0.38, 0])
+
+    part(G.neck, skin, neck, [0, 0, 0])
+    part(G.cranium, skin, head, [0, 0.11, 0.005])
+    part(G.jaw, skin, head, [0, 0.05, -0.02])
+    part(G.nose, skin, head, [0, 0.09, -0.1], true)
+    for (const x of [-1, 1]) {
+      part(G.ear, skin, head, [x * 0.09, 0.1, 0.01], true)
+      part(G.eye, a.eye, head, [x * 0.034, 0.115, -0.086], true)
+      part(G.brow, a.hair, head, [x * 0.034, 0.134, -0.092], true)
+    }
+    part(G.helmet, a.helmet, head, [0, 0.13, 0.005])
+    part(G.helmetBand, a.black, head, [0, 0.16, 0.005])
+    part(G.goggles, a.black, head, [0, 0.19, -0.115], true)
+
+    for (const [s, k, side] of [[shoulderL, elbowL, -1], [shoulderR, elbowR, 1]] as const) {
+      part(G.deltoid, a.uniform, s, [0, -0.02, 0])
+      part(G.upperArm, a.uniform, s)
+      part(G.elbow, a.uniform, k)
+      part(G.forearm, a.uniform, k)
+      part(G.cuff, a.black, k, [0, -0.35, 0])
+      part(G.palm, a.black, k, [0, -0.36, 0])
+      part(G.fingers, a.black, k, [0, -0.44, -0.005]).rotation.x = 0.6
+      part(G.thumb, a.black, k, [-side * 0.035, -0.4, -0.025]).rotation.z = side * 0.4
     }
     for (const [h, k] of [[hipL, kneeL], [hipR, kneeR]] as const) {
       part(G.thigh, a.uniform, h)
+      part(G.knee, a.uniform, k)
+      part(G.kneePad, a.black, k, [0, -0.01, -0.06], true)
       part(G.shin, a.uniform, k)
-      part(G.boot, a.black, k, [0, -0.42, 0])
+      part(G.calf, a.uniform, k, [0, -0.13, 0.012])
+      part(G.bootShaft, a.black, k, [0, -0.36, 0])
+      part(G.foot, a.black, k, [0, -0.44, 0])
+      part(G.toe, a.black, k, [0, -0.45, -0.15])
+      part(G.sole, a.black, k, [0, -0.495, 0])
     }
     part(G.receiver, a.gun, rifle, [0, 0, 0])
     part(G.barrel, a.gun, rifle, [0, 0.01, -0.36])

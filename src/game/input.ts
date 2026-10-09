@@ -12,6 +12,10 @@ const mouse = { dx: 0, dy: 0, wheel: 0 }
 /** While set, the next key/button press is captured for rebinding instead of being played. */
 let capture: ((code: string) => void) | null = null
 
+/** Typing IMMORTAL anywhere toggles god mode. */
+export const cheats = { god: false }
+let typed = ''
+
 // Keys the browser would otherwise act on (help, scroll, find, menus…).
 const PREVENT = new Set(['F1', 'F2', 'F3', 'Space', 'Tab', 'ControlLeft', 'AltLeft', 'KeyC', 'KeyR', 'KeyE', 'KeyF', 'KeyV', 'KeyG', 'KeyH', 'KeyI', 'KeyQ', 'KeyZ'])
 
@@ -63,6 +67,11 @@ export function attachInput(): () => void {
     if (capture) {
       e.preventDefault()
       return capture(e.code)
+    }
+    typed = (typed + e.key.toUpperCase()).slice(-8)
+    if (typed === 'IMMORTAL') {
+      cheats.god = !cheats.god
+      console.log(`God mode ${cheats.god ? 'ON' : 'OFF'}`)
     }
     if (PREVENT.has(e.code) && document.pointerLockElement) e.preventDefault()
     if (e.code === 'Tab' || e.code === 'F1' || e.code === 'F2') e.preventDefault()

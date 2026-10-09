@@ -10,6 +10,7 @@ import { DebugPanel } from '../ui/DebugPanel'
 import { HUD } from '../ui/HUD'
 import { BriefingScreen, LoadingScreen, MainMenu, PauseScreen, ResultsScreen } from '../ui/Screens'
 import { TacticalMapOverlay } from '../ui/TacticalMap'
+import { IntroOverlay } from '../game/IntroCinematic'
 
 export function App() {
   const phase = useGameStore((s) => s.phase)
@@ -48,6 +49,7 @@ export function App() {
       {phase === 'menu' && <MainMenu />}
       {phase === 'loading' && <LoadingScreen />}
       {phase === 'briefing' && <BriefingScreen />}
+      {phase === 'intro' && <IntroOverlay />}
       {phase === 'paused' && <PauseScreen />}
       {(phase === 'dead' || phase === 'complete') && <ResultsScreen />}
     </div>

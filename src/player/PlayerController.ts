@@ -1,5 +1,5 @@
 import { Vector3 } from 'three'
-import { input } from '../game/input'
+import { cheats, input } from '../game/input'
 import type { Character, Physics, RayHit } from '../physics/Physics'
 import { settings } from '../state/settings'
 import { clamp, damp } from '../utils/math'
@@ -215,7 +215,7 @@ export class PlayerController {
 
   /** Damage after armor. Torso hits are partly soaked by the plate carrier until it is spent. */
   damage(amount: number, cause: DeathCause = 'Eliminated', torso = false) {
-    if (!this.alive) return
+    if (!this.alive || cheats.god) return
     if (torso && this.armor > 0) {
       const soak = Math.min(this.armor, amount * 0.45)
       this.armor -= soak

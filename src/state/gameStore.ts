@@ -7,7 +7,7 @@ import type { MissionState } from '../missions/MissionSystem'
 import type { GameSession } from '../game/GameSession'
 import type { TimeOfDay } from '../world/environment'
 
-export type Phase = 'menu' | 'loading' | 'briefing' | 'playing' | 'paused' | 'dead' | 'complete'
+export type Phase = 'menu' | 'loading' | 'briefing' | 'intro' | 'playing' | 'paused' | 'dead' | 'complete'
 
 export interface ObjectiveView {
   id: string
