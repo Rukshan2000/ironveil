@@ -1,4 +1,5 @@
 import { settings, type Action } from '../state/settings'
+import { useGameStore } from '../state/gameStore'
 
 /**
  * InputManager: the only place that listens to the keyboard and mouse. Event listeners write raw state, game code
@@ -12,8 +13,8 @@ const mouse = { dx: 0, dy: 0, wheel: 0 }
 /** While set, the next key/button press is captured for rebinding instead of being played. */
 let capture: ((code: string) => void) | null = null
 
-/** Typing IMMORTAL anywhere toggles god mode. */
-export const cheats = { god: false }
+/** Typing IMMORTAL anywhere toggles god mode, LOCKNLOAD toggles unlimited ammo. */
+export const cheats = { god: false, ammo: false }
 let typed = ''
 
 // Keys the browser would otherwise act on (help, scroll, find, menus…).
@@ -68,11 +69,13 @@ export function attachInput(): () => void {
       e.preventDefault()
       return capture(e.code)
     }
-    typed = (typed + e.key.toUpperCase()).slice(-8)
-    if (typed === 'IMMORTAL') {
-      cheats.god = !cheats.god
-      console.log(`God mode ${cheats.god ? 'ON' : 'OFF'}`)
+    typed = (typed + e.key.toUpperCase()).slice(-9)
+    const toggle = (key: 'god' | 'ammo', label: string) => {
+      cheats[key] = !cheats[key]
+      useGameStore.getState().pushMessage(`CHEAT: ${label} ${cheats[key] ? 'ON' : 'OFF'}`, cheats[key] ? 'good' : 'warn')
     }
+    if (typed.endsWith('IMMORTAL')) toggle('god', 'God mode')
+    if (typed.endsWith('LOCKNLOAD')) toggle('ammo', 'Unlimited ammo')
     if (PREVENT.has(e.code) && document.pointerLockElement) e.preventDefault()
     if (e.code === 'Tab' || e.code === 'F1' || e.code === 'F2') e.preventDefault()
     if (!e.repeat) press(e.code)

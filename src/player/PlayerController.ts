@@ -3,6 +3,7 @@ import { cheats, input } from '../game/input'
 import type { Character, Physics, RayHit } from '../physics/Physics'
 import { settings } from '../state/settings'
 import { clamp, damp } from '../utils/math'
+import { audio } from '../audio/AudioSystem'
 
 export type Stance = 'stand' | 'crouch' | 'prone'
 export type DeathCause = 'Eliminated' | 'Explosion' | 'Fall' | 'Vehicle accident' | 'Out of bounds'
@@ -111,6 +112,9 @@ export class PlayerController {
   /** Horizontal speed, m/s. */
   speed = 0
   flashlight = false
+  /** Night-vision goggles down. `nvBlend` eases the image in/out (the tube takes a moment to power up). */
+  nightVision = false
+  nvBlend = 0
   /** Weapon/carry weight multiplier on top speed (set by the weapon system). */
   speedFactor = 1
   /** Extra look-sensitivity multiplier (binocular zoom). */
@@ -277,6 +281,11 @@ export class PlayerController {
     this.recoilYaw = damp(this.recoilYaw, 0, w.recoilRecovery, dt)
 
     if (input.pressed('flashlight')) this.flashlight = !this.flashlight
+    if (input.pressed('nightVision')) {
+      this.nightVision = !this.nightVision
+      audio.cue(this.nightVision ? 'beep' : 'denied')
+    }
+    this.nvBlend = damp(this.nvBlend, this.nightVision ? 1 : 0, this.nightVision ? 5 : 12, dt)
 
     if (this.vault) return this.updateVault(dt)
 

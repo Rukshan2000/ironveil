@@ -6,8 +6,8 @@ export const ACTIONS = {
   sprint: 'Sprint / steady scope', walk: 'Slow walk (quiet)', jump: 'Jump / vault', crouch: 'Crouch', prone: 'Prone',
   leanLeft: 'Lean left', leanRight: 'Lean right',
   fire: 'Fire', aim: 'Aim down sights', reload: 'Reload', inspect: 'Inspect weapon',
-  weapon1: 'Primary', weapon2: 'Secondary', weapon3: 'Special', grenade: 'Throw equipment (hold)', cycleGrenade: 'Cycle equipment',
-  interact: 'Interact', flashlight: 'Flashlight', binoculars: 'Binoculars', map: 'Tactical map', objectives: 'Objectives (hold)',
+  weapon1: 'Primary', weapon2: 'Secondary', weapon3: 'Special', weapon4: 'Equipment (grenades in hand)', weapon5: 'Knife', grenade: 'Throw equipment (hold)', cycleGrenade: 'Cycle equipment',
+  interact: 'Interact', flashlight: 'Flashlight', nightVision: 'Night vision', binoculars: 'Binoculars', map: 'Tactical map', objectives: 'Objectives (hold)',
   debug: 'Debug panel', validate: 'Level validation',
 } as const
 
@@ -18,8 +18,8 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   sprint: ['ShiftLeft'], walk: ['AltLeft'], jump: ['Space'], crouch: ['ControlLeft', 'KeyC'], prone: ['KeyZ'],
   leanLeft: ['KeyQ'], leanRight: ['KeyE'],
   fire: ['Mouse0'], aim: ['Mouse2'], reload: ['KeyR'], inspect: ['KeyI'],
-  weapon1: ['Digit1'], weapon2: ['Digit2'], weapon3: ['Digit3'], grenade: ['KeyG'], cycleGrenade: ['KeyH'],
-  interact: ['KeyE'], flashlight: ['KeyF'], binoculars: ['KeyB'], map: ['KeyM'], objectives: ['Tab'],
+  weapon1: ['Digit1'], weapon2: ['Digit2'], weapon3: ['Digit3'], weapon4: ['Digit4'], weapon5: ['Digit5'], grenade: ['KeyG'], cycleGrenade: ['KeyH'],
+  interact: ['KeyE'], flashlight: ['KeyF'], nightVision: ['KeyN'], binoculars: ['KeyB'], map: ['KeyM'], objectives: ['Tab'],
   debug: ['F1'], validate: ['F2'],
 }
 
@@ -39,6 +39,10 @@ export interface Settings {
   resolutionScale: number
   postProcessing: boolean
   fov: number
+  /** Hip-fire weapon position offset in cm (right, up, forward). ADS stays on the sight line. */
+  weaponX: number
+  weaponY: number
+  weaponZ: number
   // audio (0..1)
   master: number
   music: number
@@ -57,7 +61,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1, adsSensitivity: 1, scopeSensitivity: 1, invertY: false, toggleCrouch: false, adsSpeed: 1,
   bindings: DEFAULT_BINDINGS,
-  quality: 'high', shadows: true, resolutionScale: 1, postProcessing: true, fov: 72,
+  quality: 'high', shadows: true, resolutionScale: 1, postProcessing: true, fov: 72, weaponX: 0, weaponY: 0, weaponZ: 0,
   master: 0.8, music: 0.55, effects: 1, voice: 1,
   crosshair: true, minimap: true, minimapRotate: true, subtitles: true, detectionIndicators: true, uiScale: 1, tutorial: true,
 }

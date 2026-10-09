@@ -6,9 +6,11 @@ type Vec = { x: number; y: number; z: number }
 type SurfaceSound = 'concrete' | 'metal' | 'wood' | 'dirt' | 'grass' | 'glass' | 'flesh' | 'fabric'
 export type MechSound = 'magOut' | 'magIn' | 'bolt' | 'boltCycle' | 'equip' | 'dry' | 'inspect' | 'aimIn' | 'aimOut' | 'switch'
 export type VoiceSound = 'suspicious' | 'alert' | 'contact' | 'reinforce' | 'lost' | 'hurt' | 'death' | 'search' | 'reload' | 'body'
-export type LoopKind = 'wind' | 'insects' | 'hum' | 'generator' | 'radio' | 'fire' | 'engine' | 'siren'
+export type LoopKind = 'wind' | 'insects' | 'hum' | 'generator' | 'radio' | 'fire' | 'engine' | 'truck' | 'rotor' | 'siren' | 'rain'
 
 export interface ShotProfile {
+  /** Sound file name in src/audio/sounds (falls back to `gunshot`, then to the synthesized shot). */
+  file?: string
   body: number
   crack: number
   gain: number
@@ -24,8 +26,26 @@ export interface LoopHandle {
   stop(): void
 }
 
+/** Boost on the player's own gunshots (recordings and synth), relative to everyone else's. */
+const PLAYER_SHOT_GAIN = 2.6
 const SPEED_OF_SOUND = 343
 const MAX_VOICES = 56
+
+/** Drop-in sound files: src/audio/sounds/<name>.mp3|ogg|wav replaces the synthesized sound of that name (see README.md there). */
+const FILES = Object.entries(import.meta.glob('./sounds/*.{mp3,ogg,wav}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)
+  .map(([path, url]) => [path.slice('./sounds/'.length).replace(/\.\w+$/, ''), url] as const)
+
+/** The `ambience` sound file playing on a crossfaded loop: `next` is when the following copy starts. */
+interface Bed {
+  gain: GainNode
+  next: number
+  playing: AudioBufferSourceNode[]
+}
+
+/** Seconds each loop pass overlaps the next; equal-power curves so the seam has no dip or click. */
+const BED_OVERLAP = 2
+const FADE_IN = Float32Array.from({ length: 64 }, (_, i) => Math.sin((i / 63) * (Math.PI / 2)))
+const FADE_OUT = Float32Array.from({ length: 64 }, (_, i) => Math.cos((i / 63) * (Math.PI / 2)))
 
 interface Out {
   input: AudioNode
@@ -48,7 +68,8 @@ export class AudioSystem {
   private voices = 0
   private readonly listener = { x: 0, y: 0, z: 0 }
   private loops: LoopHandle[] = []
-  private ambience: { timer: number; level: { wind: number; insects: number; birds: number }; sources: Vec[]; wind?: LoopHandle; insects?: LoopHandle } | null = null
+  private readonly samples = new Map<string, AudioBuffer>()
+  private ambience: { timer: number; level: { wind: number; insects: number; birds: number }; sources: Vec[]; wind?: LoopHandle; insects?: LoopHandle; rain?: LoopHandle; rainLevel: number; bed?: Bed; bedLevel: number } | null = null
 
   get ready() {
     return !!this.ctx
@@ -78,6 +99,10 @@ export class AudioSystem {
       this.reverbIn.connect(this.reverb).connect(this.master)
       this.white = this.noiseBuffer(2, false)
       this.brown = this.noiseBuffer(4, true)
+      for (const [name, url] of FILES) {
+        fetch(url).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).then((buf) => this.samples.set(name, buf))
+          .catch(() => console.warn(`Sound file ${name} could not be loaded`))
+      }
     }
     void this.ctx.resume()
   }
@@ -208,6 +233,20 @@ export class AudioSystem {
     return { input, delay }
   }
 
+  /** Plays a loaded sound file instead of the recipe. Returns false when there is no file of that name. */
+  private sample(dest: AudioNode, at: number, ...names: string[]): boolean {
+    // `name` or numbered variants `name-1`, `name-2`… (one picked at random so repeats don't sound canned)
+    const variants = (n: string) => [this.samples.get(n), ...Array.from({ length: 12 }, (_, i) => this.samples.get(`${n}-${i + 1}`))].filter((b): b is AudioBuffer => !!b)
+    const pool = names.map(variants).find((v) => v.length)
+    const buf = pool?.[Math.floor(Math.random() * pool.length)]
+    if (!buf) return false
+    // slight pitch variation so repeated sounds don't machine-gun
+    const src = new AudioBufferSourceNode(this.ctx!, { buffer: buf, playbackRate: 0.96 + Math.random() * 0.08 })
+    src.connect(dest)
+    src.start(this.ctx!.currentTime + at)
+    return true
+  }
+
   // ---- primitives ------------------------------------------------------------------------------------
 
   private noise(dest: AudioNode, at: number, o: { volume: number; attack?: number; decay: number; type?: BiquadFilterType; freq: number; q?: number; endFreq?: number; rate?: number; brown?: boolean }) {
@@ -253,9 +292,13 @@ export class AudioSystem {
     const dist = pos ? this.distanceTo(pos) : 0
     const o = this.out({ pos, ref: 10, rolloff: 0.9, wet: 0.35, delaySound: true, life: p.tail + 0.5, muffle: suppressedNearby })
     if (!o) return
-    const { input: d, delay } = o
+    const { input, delay } = o
+    // your own gun is right at your ear: much louder than anyone else's
+    const d = pos ? input : new GainNode(this.ctx!, { gain: PLAYER_SHOT_GAIN })
+    if (d !== input) d.connect(input)
+    if (this.sample(d, delay, p.file ?? 'gunshot', 'gunshot')) return
     const far = Math.min(1, dist / 150)
-    const g = p.gain * (pos ? 1 : 0.85)
+    const g = p.gain
     this.noise(d, delay, { volume: 1.1 * g * (1 - far * 0.8), decay: 0.035, type: 'highpass', freq: 1800 })
     this.noise(d, delay, { volume: 1.0 * g, decay: 0.16 + far * 0.2, freq: 1800 - far * 1300, endFreq: 300 })
     this.tone(d, delay, { freq: p.body, endFreq: p.body * 0.45, volume: 0.9 * g, decay: 0.14 + far * 0.15 })
@@ -264,11 +307,21 @@ export class AudioSystem {
     if (!pos) this.click(d, 0.012, 3200, 0.12 * p.mech)
   }
 
+  /** Keyboard key (or a mouse click): a soft plastic tick, close to the ear. */
+  keyTap(mouse = false) {
+    const o = this.out({ life: 0.15, wet: 0.02 })
+    if (!o) return
+    if (this.sample(o.input, 0, mouse ? 'mouse-click' : 'key-tap')) return
+    this.noise(o.input, 0, { volume: mouse ? 0.05 : 0.035 + Math.random() * 0.02, decay: 0.02, type: 'bandpass', freq: mouse ? 4200 : 2200 + Math.random() * 900, q: 3 })
+    this.noise(o.input, 0.012, { volume: 0.015, decay: 0.03, type: 'bandpass', freq: 900, q: 1.5 })
+  }
+
   /** Grenade detonation: a deep boom with a long rolling tail (frag), or a sharp crack (flashbang). */
   explosion(pos: Vec, kind: 'frag' | 'flash' | 'smoke') {
     const o = this.out({ pos, ref: 14, rolloff: 0.8, wet: 0.5, delaySound: true, life: 3.5 })
     if (!o) return
     const { input: d, delay } = o
+    if (this.sample(d, delay, `explosion-${kind}`)) return
     if (kind === 'smoke') {
       this.click(d, delay, 900, 0.3)
       this.noise(d, delay + 0.02, { volume: 0.5, attack: 0.05, decay: 2.2, type: 'bandpass', freq: 1400, q: 0.6 })
@@ -285,6 +338,7 @@ export class AudioSystem {
   pin() {
     const o = this.out({ life: 0.4, wet: 0.02 })
     if (!o) return
+    if (this.sample(o.input, 0, 'pin')) return
     this.click(o.input, 0, 3600, 0.22)
     this.click(o.input, 0.09, 2400, 0.15)
   }
@@ -293,6 +347,7 @@ export class AudioSystem {
   grenadeBounce(pos: Vec, strength: number) {
     const o = this.out({ pos, ref: 1.5, life: 0.4, wet: 0.08 })
     if (!o) return
+    if (this.sample(o.input, 0, 'grenade-bounce')) return
     this.click(o.input, 0, 1700 + Math.random() * 500, 0.3 * strength)
     this.noise(o.input, 0.01, { volume: 0.12 * strength, decay: 0.08, type: 'bandpass', freq: 900, q: 2 })
   }
@@ -308,6 +363,7 @@ export class AudioSystem {
     const o = this.out({ pos, ref: 1.2, life: 0.6, wet: 0.05 })
     if (!o) return
     const d = o.input
+    if (this.sample(d, 0, `mech-${kind}`)) return
     switch (kind) {
       case 'magOut':
         this.click(d, 0, 2400, 0.25)
@@ -358,6 +414,11 @@ export class AudioSystem {
     const o = this.out({ pos, ref: 1.5, rolloff: 1.4, life: 0.35, wet: 0.04 })
     if (!o) return
     const d = o.input
+    // sound files follow the step's loudness too (sneaking vs sprinting), like the synthesized steps
+    const step = new GainNode(this.ctx!, { gain: Math.min(1, 0.25 + intensity * 0.75) })
+    step.connect(d)
+    if (this.sample(step, 0, `footstep-${surface}`, 'footstep')) return
+    step.disconnect()
     const v = 0.06 + intensity * 0.18
     switch (surface) {
       case 'metal':
@@ -400,6 +461,7 @@ export class AudioSystem {
     const o = this.out({ pos, ref: 3, life: 0.5, wet: 0.2 })
     if (!o) return
     const d = o.input
+    if (this.sample(d, 0, `impact-${surface}`, 'impact')) return
     switch (surface) {
       case 'metal':
         this.noise(d, 0, { volume: 0.4, decay: 0.04, type: 'highpass', freq: 2500 })
@@ -475,6 +537,10 @@ export class AudioSystem {
     const o = this.out({ pos, ref: 4, rolloff: 1.1, life: 2, wet: 0.2, muffle: occluded, bus: this.voiceBus })
     if (!o) return
     const d = o.input
+    // recorded shouts: a callout's own file, or one of the generic military vocals (not for pain / death cries)
+    const generic = kind !== 'hurt' && kind !== 'death'
+    const names = generic && Math.random() < 0.5 ? ['voice', `voice-${kind}`] : [`voice-${kind}`, ...(generic ? ['voice'] : [])]
+    if (this.sample(d, 0, ...names)) return
     const ctx = this.ctx!
     const syllables = { suspicious: [1, 0.7], alert: [1.3, 1.1, 0.9], contact: [1.2, 1.2, 1, 0.8], reinforce: [1, 1.1, 0.9, 1, 0.8, 0.7], lost: [0.9, 0.8], hurt: [1.4], death: [1.1], search: [1, 0.9, 1], reload: [1, 0.9], body: [1.3, 1.2, 1.1] }[kind]
     const base = 105 + Math.random() * 30
@@ -524,6 +590,7 @@ export class AudioSystem {
     const o = this.out({ bus: this.ui, life: 0.5, wet: 0 })
     if (!o) return
     const d = o.input
+    if (this.sample(d, 0, `cue-${kind}`)) return
     if (kind === 'hit') this.noise(d, 0, { volume: 0.18, decay: 0.03, type: 'bandpass', freq: 3500, q: 4 })
     if (kind === 'kill') {
       this.noise(d, 0, { volume: 0.2, decay: 0.04, type: 'bandpass', freq: 3000, q: 4 })
@@ -554,9 +621,9 @@ export class AudioSystem {
     let dest: AudioNode = this.amb
     let panner: PannerNode | null = null
     if (pos) {
-      const ref = { hum: 1.5, generator: 3, radio: 1.5, fire: 1.5, engine: 4, siren: 12, wind: 1, insects: 1 }[kind]
+      const ref = { hum: 1.5, generator: 3, radio: 1.5, fire: 1.5, engine: 4, truck: 4, rotor: 8, siren: 12, rain: 1, wind: 1, insects: 1 }[kind]
       panner = new PannerNode(ctx, { panningModel: 'HRTF', distanceModel: 'inverse', refDistance: ref, rolloffFactor: 1.3, maxDistance: 1000, positionX: pos.x, positionY: pos.y, positionZ: pos.z })
-      panner.connect(kind === 'engine' || kind === 'siren' ? this.sfx : this.amb)
+      panner.connect(kind === 'engine' || kind === 'truck' || kind === 'rotor' || kind === 'siren' ? this.sfx : this.amb)
       dest = panner
     }
     gain.connect(dest)
@@ -581,7 +648,15 @@ export class AudioSystem {
     }
     let rateParam: ((v: number) => void) | null = null
 
-    switch (kind) {
+    // a sound file named loop-<kind> replaces the synthesized loop
+    const file = this.samples.get(`loop-${kind}`)
+    if (file) {
+      const s = src(file)
+      s.connect(gain)
+      // engines rev: pitch follows rpm (0..1), idle a little below the recording
+      if (kind === 'truck' || kind === 'engine') rateParam = (rpm) => s.playbackRate.setTargetAtTime(0.75 + rpm * 0.6, ctx.currentTime, 0.1)
+      gain.gain.setTargetAtTime(0.6 * level, ctx.currentTime, 0.4)
+    } else switch (kind) {
       case 'wind': {
         const f = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 420, Q: 0.6 })
         src(this.brown, 0.7).connect(f).connect(gain)
@@ -644,6 +719,8 @@ export class AudioSystem {
         gain.gain.setTargetAtTime(0.3 * level, ctx.currentTime, 0.5)
         break
       }
+      case 'truck': // no truck / rotor file: the synthesized engine
+      case 'rotor':
       case 'engine': {
         const f = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 300, Q: 3 })
         const a = osc('sawtooth', 32), b = osc('square', 16)
@@ -662,6 +739,16 @@ export class AudioSystem {
           ng.gain.setTargetAtTime(0.1 + rpm * 0.25, t, 0.1)
         }
         gain.gain.setTargetAtTime(0.35 * level, ctx.currentTime, 0.3)
+        break
+      }
+      case 'rain': {
+        // hiss of drops plus a soft low rumble on roofs and ground; level is driven by the weather
+        const hiss = new BiquadFilterNode(ctx, { type: 'bandpass', frequency: 3800, Q: 0.4 })
+        src(this.white, 0.9).connect(hiss).connect(gain)
+        const low = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 450 })
+        const lg = new GainNode(ctx, { gain: 0.6 })
+        src(this.brown, 0.8).connect(low).connect(lg).connect(gain)
+        gain.gain.setTargetAtTime(0.3 * level, ctx.currentTime, 0.5)
         break
       }
       case 'siren': {
@@ -709,7 +796,7 @@ export class AudioSystem {
     const wind = this.loop('wind', null, level.wind) ?? undefined
     const insects = level.insects > 0 ? this.loop('insects', null, level.insects) ?? undefined : undefined
     for (const s of sources) this.loop(s.kind, { x: s.position[0], y: s.position[1], z: s.position[2] })
-    this.ambience = { timer: 4, level, sources: sources.map((s) => ({ x: s.position[0], y: s.position[1], z: s.position[2] })), wind, insects }
+    this.ambience = { timer: 4, level, sources: sources.map((s) => ({ x: s.position[0], y: s.position[1], z: s.position[2] })), wind, insects, rain: this.loop('rain', null, 0) ?? undefined, rainLevel: 0, bedLevel: 1 }
   }
 
   /** Scales the outdoor bed (wind + insects) — audio zones duck it indoors. */
@@ -718,12 +805,60 @@ export class AudioSystem {
     if (!a) return
     a.wind?.set('level', 0.5 * a.level.wind * k)
     a.insects?.set('level', 0.05 * a.level.insects * k)
+    a.rain?.set('level', this.rainGain * a.rainLevel * k)
+    a.bedLevel = k
+    a.bed?.gain.gain.setTargetAtTime(0.7 * k, this.ctx!.currentTime, 0.3)
+  }
+
+  /** The recorded rain (loop-rain) is much quieter than the synthesized hiss, so it gets more gain. */
+  private get rainGain() {
+    return this.samples.has('loop-rain') ? 1.1 : 0.3
+  }
+
+  /** Rain on the soundscape (0..1), ducked indoors like the rest of the bed. */
+  setRain(k: number) {
+    const a = this.ambience
+    if (!a || Math.abs(a.rainLevel - k) < 0.01) return
+    a.rainLevel = k
+    a.rain?.set('level', this.rainGain * k * a.bedLevel)
+  }
+
+  /** Keeps the `ambience` file looping: schedules the next copy to start BED_OVERLAP seconds before this one ends. */
+  private updateBed() {
+    const a = this.ambience!
+    const ctx = this.ctx!
+    const buf = this.samples.get('ambience') // decodes after unlock, so the bed may start a moment late
+    if (!buf) return
+    if (!a.bed) {
+      const gain = new GainNode(ctx, { gain: 0.7 * a.bedLevel })
+      gain.connect(this.amb)
+      a.bed = { gain, next: ctx.currentTime + 0.05, playing: [] }
+    }
+    const bed = a.bed
+    const x = Math.min(BED_OVERLAP, buf.duration / 4)
+    while (bed.next < ctx.currentTime + 1) {
+      const t = bed.next
+      const src = new AudioBufferSourceNode(ctx, { buffer: buf })
+      const g = new GainNode(ctx, { gain: 0 })
+      g.gain.setValueCurveAtTime(FADE_IN, t, x)
+      g.gain.setValueAtTime(1, t + buf.duration - x)
+      g.gain.setValueCurveAtTime(FADE_OUT, t + buf.duration - x, x)
+      src.connect(g).connect(bed.gain)
+      src.start(t)
+      src.onended = () => {
+        g.disconnect()
+        bed.playing = bed.playing.filter((p) => p !== src)
+      }
+      bed.playing.push(src)
+      bed.next = t + buf.duration - x
+    }
   }
 
   /** Random sparse events: distant gunfire, a far vehicle, birds, gusts. Kept quiet on purpose. */
   update(dt: number) {
     const a = this.ambience
     if (!a || !this.ctx) return
+    this.updateBed()
     if ((a.timer -= dt) > 0) return
     a.timer = 6 + Math.random() * 14
     const l = this.listener
@@ -740,7 +875,7 @@ export class AudioSystem {
     } else if (r < 0.4) {
       // a truck grinding along a far road
       const p = far(250, 400)
-      const eng = this.loop('engine', p, 0.0)
+      const eng = this.loop('truck', p, 0.0)
       if (eng) {
         eng.set('rate', 0.35)
         eng.set('level', 0.5)
@@ -757,6 +892,14 @@ export class AudioSystem {
 
   stopAll() {
     for (const l of [...this.loops]) l.stop()
+    const bed = this.ambience?.bed
+    if (bed && this.ctx) {
+      bed.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2)
+      setTimeout(() => {
+        bed.playing.forEach((s) => s.stop())
+        bed.gain.disconnect()
+      }, 800)
+    }
     this.ambience = null
   }
 }

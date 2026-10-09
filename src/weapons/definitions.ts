@@ -12,7 +12,7 @@ export const AR_K7: WeaponDefinition = {
   spread: { hip: 0.028, ads: 0.0025, moving: 0.028, perShot: 0.005, maxBloom: 0.035, recovery: 0.11 },
   sway: { idle: 0.004, ads: 0.0012, inertia: 1 },
   adsFov: 52, optics: [1, 2], adsTime: 0.22, scope: false, holdBreath: false, speedFactor: 0.95, noiseRadius: 55,
-  sound: { body: 120, crack: 3200, gain: 1, tail: 1.6, mech: 1 },
+  sound: { file: 'gunshot-k7', body: 120, crack: 3200, gain: 1, tail: 1.6, mech: 1 },
   viewmodel: { kind: 'rifle', hip: [0.1, -0.125, -0.21], ads: [0, 0, -0.2], scale: 1 },
   shell: 1,
 }
@@ -29,7 +29,7 @@ export const P_11: WeaponDefinition = {
   spread: { hip: 0.022, ads: 0.004, moving: 0.02, perShot: 0.01, maxBloom: 0.03, recovery: 0.2 },
   sway: { idle: 0.005, ads: 0.0018, inertia: 0.6 },
   adsFov: 60, adsTime: 0.15, scope: false, holdBreath: false, speedFactor: 1.04, noiseRadius: 32,
-  sound: { body: 170, crack: 2600, gain: 0.7, tail: 1.1, mech: 0.7 },
+  sound: { file: 'gunshot-p11', body: 170, crack: 2600, gain: 0.7, tail: 1.1, mech: 0.7 },
   viewmodel: { kind: 'pistol', hip: [0.085, -0.072, -0.26], ads: [0, 0.006, -0.3], scale: 1 },
   shell: 0.6,
 }
@@ -46,7 +46,7 @@ export const VK_8: WeaponDefinition = {
   spread: { hip: 0.06, ads: 0.0003, moving: 0.05, perShot: 0.02, maxBloom: 0.03, recovery: 0.1 },
   sway: { idle: 0.003, ads: 0.0042, inertia: 1.4 },
   adsFov: 18, optics: [4, 8], adsTime: 0.32, scope: true, holdBreath: true, speedFactor: 0.88, noiseRadius: 90,
-  sound: { body: 85, crack: 3800, gain: 1.35, tail: 2.6, mech: 1.3 },
+  sound: { file: 'gunshot-vk8', body: 85, crack: 3800, gain: 1.35, tail: 2.6, mech: 1.3 },
   viewmodel: { kind: 'sniper', hip: [0.115, -0.12, -0.22], ads: [0, 0, -0.1], scale: 1 },
   shell: 1.4,
 }

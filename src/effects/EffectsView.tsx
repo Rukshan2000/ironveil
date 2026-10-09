@@ -251,9 +251,13 @@ export function EffectsView({ session }: { session: GameSession }) {
   const additive = usePoints(fx.additive, true)
   const soft = usePoints(fx.soft, false)
   const { size } = useThree()
-  const light = useMemo(() => new Color(session.environment.preset.hemiSky).lerp(new Color(session.environment.preset.sunColor), 0.35).multiplyScalar(session.environment.preset.label.startsWith('NIGHT') ? 0.35 : 0.9), [session])
+  const light = useMemo(() => new Color(), [])
+  const sunC = useMemo(() => new Color(), [])
 
   useFrame(({ camera }) => {
+    // smoke and dust take the colour of the light of the moment (dimmer after dark)
+    const env = session.environment
+    light.set(env.preset.hemiSky).lerp(sunC.set(env.preset.sunColor), 0.35).multiplyScalar(0.35 + 0.55 * Math.min(1, env.preset.hemiIntensity * 1.4))
     const cam = camera as PerspectiveCamera
     const scale = size.height / 2 / Math.tan((cam.fov * Math.PI) / 360)
     for (const pts of [additive, soft]) {

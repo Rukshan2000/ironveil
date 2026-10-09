@@ -71,7 +71,7 @@ export interface HudState {
   /** -1..1 lean. */
   lean: number
   armor: number
-  equipment: { name: string; count: number; counts: Record<'frag' | 'smoke' | 'flash', number> }
+  equipment: { name: string; count: number; inHand: boolean; counts: Record<'frag' | 'smoke' | 'flash', number> }
   /** 0..1 aim-down-sights blend. */
   aim: number
   /** Optic magnification label while aimed ("2×"), null otherwise. */
@@ -80,6 +80,7 @@ export interface HudState {
   light: number
   indoors: boolean
   flashlight: boolean
+  nightVision: boolean
   keycard: boolean
   restricted: string | null
   timeLabel: string

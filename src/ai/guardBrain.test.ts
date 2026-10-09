@@ -109,6 +109,22 @@ describe('guard brain', () => {
     expect(g.ammo).toBeGreaterThan(0)
   })
 
+  it('soldier types: heavy outshoots a rifleman, a sniper fires single slow shots', () => {
+    const shots = (kind: 'rifleman' | 'heavy' | 'sniper') => {
+      const g = createGuard('g', [new Vector3(0, 2, 0)], 0, 2, 30, kind) // stationary post: no movement noise
+      alertGuard(g, new Vector3(0, 0, -10))
+      run(g, unseen(), 0.7)
+      const visible: Perception = { ...unseen(), playerVisible: true, exposure: 1, playerPosition: new Vector3(0, 0, -10) }
+      let n = 0
+      for (let t = 0; t < 6; t += 0.05) n += updateGuardBrain(g, visible, stubWorld(), 0.05, () => 0.5).fire ? 1 : 0
+      return n
+    }
+    const rifle = shots('rifleman'), heavy = shots('heavy'), sniper = shots('sniper')
+    expect(heavy).toBeGreaterThan(rifle)
+    expect(sniper).toBeGreaterThan(0)
+    expect(sniper).toBeLessThanOrEqual(3)
+  })
+
   it('retreats when badly hurt', () => {
     const cover: CoverPoint = { id: 0, pos: new Vector3(0, 0, 8), normal: new Vector3(0, 0, 1), low: false, takenBy: null }
     const g = createGuard('g', [new Vector3(), new Vector3(1, 0, 0)], 0, 2)

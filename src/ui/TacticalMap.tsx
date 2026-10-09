@@ -18,7 +18,7 @@ export function TacticalMap({ briefing = false }: { briefing?: boolean }) {
     canvas.height = H * dpr
     const ctx = canvas.getContext('2d')!
     ctx.scale(dpr, dpr)
-    const baked = bakeLevel(session.layout)
+    const baked = bakeLevel(session)
     const draw = () => drawTacticalMap(ctx, session, baked, W, H, briefing)
     draw()
     if (briefing) return
@@ -30,7 +30,7 @@ export function TacticalMap({ briefing = false }: { briefing?: boolean }) {
 
 const LEGEND: [string, string][] = [
   ['◆', 'Objective (amber: current)'], ['■', 'Camera (discovered)'], ['●', 'Searchlight'], ['A', 'Alarm panel'],
-  ['•', 'Tagged hostile'], ['- -', 'Restricted area'],
+  ['•', 'Tagged hostile'], ['- -', 'Restricted area'], ['▬', 'Road'], ['▢', 'Building (walls bright)'], ['♣', 'Trees / cover'],
 ]
 
 export function TacticalMapOverlay() {

@@ -2,7 +2,7 @@
 // GLTF scene (keeping the named parts) and the view-model animation code stays untouched.
 // Convention: origin on the sight line, barrel towards -Z, metres.
 import {
-  BoxGeometry, CapsuleGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry, TorusGeometry, Vector3,
+  BoxGeometry, CapsuleGeometry, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, Vector3,
   type BufferGeometry, type Material, type Object3D,
 } from 'three'
 import type { ViewModelKind } from '../weapons/types'
@@ -83,14 +83,10 @@ function rifle(m: ReturnType<typeof makeMats>): ViewModel {
   add(root, cylZ(0.0105, 0.22), m.steel, [0, bore, -0.55])
   add(root, cylZ(0.016, 0.07, 8), m.steel, [0, bore, -0.68]) // muzzle brake
   add(root, box(0.008, 0.035, 0.012), m.steel, [0, bore + 0.03, -0.44]) // gas block / front post
-  // red dot optic on the sight line
-  // housing sits below the sight line (rail mount + window frame), so the view through the glass is clear
-  add(root, box(0.036, 0.008, 0.08), m.polymer, [0, -0.023, 0.0])
-  for (const x of [-0.017, 0.017]) add(root, box(0.004, 0.03, 0.012), m.polymer, [x, -0.006, -0.04]) // window posts
-  add(root, new TorusGeometry(0.017, 0.004, 6, 16), m.polymer, [0, 0, -0.04])
-  add(root, new TorusGeometry(0.017, 0.004, 6, 16), m.polymer, [0, 0, 0.035])
-  add(root, new CylinderGeometry(0.015, 0.015, 0.002, 16).rotateX(Math.PI / 2), m.glass, [0, 0, -0.04]).material = new MeshStandardMaterial({ color: '#4a6070', transparent: true, opacity: 0.25, roughness: 0.05, metalness: 0.5 })
-  add(root, new SphereGeometry(0.0012, 6, 6), m.dot, [0, 0, -0.035])
+  // red dot on the sight line: just the low mount, no window frame, so nothing blocks the aimed view
+  add(root, box(0.04, 0.008, 0.08), m.polymer, [0, -0.031, 0.0])
+  // the dot is unlit and skips tone mapping so it stays a crisp, bright red against any background
+  add(root, new SphereGeometry(0.0016, 10, 10), new MeshBasicMaterial({ color: '#ff2010', toneMapped: false }), [0, 0, -0.038])
   // stock
   add(root, box(0.04, 0.03, 0.2), m.polymer, [0, bore + 0.005, 0.26])
   add(root, box(0.045, 0.085, 0.09), m.polymer, [0, bore - 0.035, 0.33])

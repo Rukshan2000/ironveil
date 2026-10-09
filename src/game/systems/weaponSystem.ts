@@ -4,6 +4,7 @@ import { randomInCone } from '../../effects/EffectsSystem'
 import { settings } from '../../state/settings'
 import { input } from '../input'
 import type { GameSession } from '../GameSession'
+import { KNIFE, stab } from '../../weapons/knife'
 
 const eye = new Vector3()
 const fwd = new Vector3()
@@ -36,6 +37,34 @@ export function updateWeapons(s: GameSession, dt: number) {
     return
   }
 
+  // knife (slot 5): put the gun (or grenade) away and draw the blade
+  if (input.pressed('weapon5') && !s.knife.equipped && !s.grenades.priming) {
+    if (!s.grenades.equipped) s.weapon.lower()
+    s.knife.equipped = true
+    s.grenades.equipped = false
+    s.pendingWeapon = null
+    audio.cloth(0.6)
+  }
+  // grenade (slot 4) or knife (slot 5) in hand: the gun stays put away until a weapon key or the wheel picks one
+  if (s.grenades.equipped || s.knife.equipped) {
+    const slots = ['weapon1', 'weapon2', 'weapon3'] as const
+    const wheel = input.consumeWheel()
+    let pick = s.weapons.findIndex((w) => input.pressed(slots[w.def.slot - 1]))
+    if (pick < 0 && wheel) pick = s.weaponIndex
+    if (pick < 0) {
+      player.speedFactor = 1
+      s.holdingBreath = false
+      s.weapon.tick(dt, false, false, adsSpeed)
+      if (s.knife.equipped && s.weapon.lowered && input.pressed('fire') && !player.sprinting && s.time - s.knife.swingAt > KNIFE.cooldown) stab(s)
+      return
+    }
+    s.grenades.equipped = false
+    s.knife.equipped = false
+    s.weaponIndex = pick
+    s.weapon.equip()
+    audio.mech('equip')
+  }
+
   // switching: number keys or wheel. The current weapon is lowered first, then the new one is drawn.
   const wheel = input.consumeWheel()
   if (wheel && s.weapon.aim > 0.5 && s.weapon.def.optics && s.weapon.def.optics.length > 1) {
@@ -66,7 +95,7 @@ export function updateWeapons(s: GameSession, dt: number) {
 
   const weapon = s.weapon
   const def = weapon.def
-  const busy = s.grenades.handsBusy > 0 || s.pendingWeapon !== null || !!player.vault
+  const busy = s.grenades.handsBusy > 0 || s.pendingWeapon !== null || !!player.vault || s.terminal.blend > 0.05
   player.speedFactor = def.speedFactor
   const aiming = input.down('aim') && !player.sprinting && !busy
   const wasAim = weapon.aim > 0.5

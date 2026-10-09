@@ -9,8 +9,9 @@ export const NIGHTFALL: MissionDef = {
     'cut the facility\'s uplink and get out through the north-west landing zone. Approach is your call.',
   situation:
     'Halvard Ridge is a hardened relay station run by the 9th Signals Detachment. For six weeks it has been routing ' +
-    'coded traffic we cannot read. Tonight a single operative — call sign WREN — goes in alone. No support until extraction. ' +
-    'CANOPY will be your handler on this net.',
+    'coded orders across the border, and everything points to a move on the valley at dawn. The orders are on the station\'s ' +
+    'comms terminal. Copy them, then cut the uplink so the theft cannot be reported before we act on it. ' +
+    'Tonight a single operative — call sign WREN — goes in alone. No support until extraction. CANOPY will be your handler on this net.',
   intel: [
     'Nineteen guards on site, working in squads of two to four. Raise the alarm and up to thirteen more come in from the barracks, the compound, the vehicle area and the south road.',
     'Security cameras cover the gate, the command building and the security compound. Alarm panels are wired — they work even if radios do not.',

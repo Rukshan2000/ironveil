@@ -9,6 +9,7 @@ import { BAKE_SCALE, bakeLevel, GUARD_COLORS } from './mapDraw'
 const SIZE = 150
 const PX_PER_M = 1.6
 const SPOT_MEMORY = 4
+const PAD = 80
 
 const eye = new Vector3()
 const chest = new Vector3()
@@ -22,8 +23,9 @@ export function Minimap() {
   useEffect(() => {
     const session = useGameStore.getState().session
     if (!session) return
-    const baked = bakeLevel(session.layout)
-    const [minX, minZ] = session.layout.bounds
+    const baked = bakeLevel(session, PAD)
+    const minX = session.layout.bounds[0] - PAD, minZ = session.layout.bounds[1] - PAD
+    const areas = session.layout.areas.filter((a) => a.rect[2] - a.rect[0] <= 60)
     const ctx = ref.current!.getContext('2d')!
     const spotted = new Map<string, number>()
     const draw = () => {
@@ -91,6 +93,22 @@ export function Minimap() {
       }
       const t = objectiveTarget(session)
       ctx.restore()
+      // area names, kept upright
+      ctx.font = '600 9px "DIN Alternate", "Bahnschrift", sans-serif'
+      ctx.textAlign = 'center'
+      ctx.lineWidth = 3
+      ctx.lineJoin = 'round'
+      ctx.strokeStyle = 'rgba(10,12,10,0.75)'
+      ctx.fillStyle = 'rgba(236,236,224,0.9)'
+      const cy = Math.cos(yaw), sy = Math.sin(yaw)
+      for (const a of areas) {
+        const dx = (a.rect[0] + a.rect[2]) / 2 - center.x, dz = (a.rect[1] + a.rect[3]) / 2 - center.z
+        const x = SIZE / 2 + (dx * cy - dz * sy) * PX_PER_M, y = SIZE / 2 + (dx * sy + dz * cy) * PX_PER_M
+        if (x < 10 || x > SIZE - 10 || y < 10 || y > SIZE - 10) continue
+        const label = a.label.replace(/^the /, '').toUpperCase()
+        ctx.strokeText(label, x, y)
+        ctx.fillText(label, x, y)
+      }
       if (t) {
         // objective marker, clamped to the edge
         const dx = t[0] - center.x, dz = t[2] - center.z

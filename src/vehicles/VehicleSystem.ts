@@ -87,7 +87,7 @@ export class Vehicle {
     this.body.setNextKinematicRotation(this.quaternion)
     this.speed = r.speed
     this.rpm = damp(this.rpm, clamp(Math.abs(this.speed) / this.def.maxSpeed, 0, 1) * 0.8 + 0.15, 3, dt)
-    this.engine ??= audio.loop('engine', this.position)
+    this.engine ??= audio.loop('truck', this.position)
     this.engine?.set('rate', this.rpm)
     this.engine?.move(this.position)
   }
@@ -138,7 +138,7 @@ export class Vehicle {
     const target = clamp(Math.abs(this.speed) / def.maxSpeed, 0, 1) * 0.8 + Math.abs(this.throttle) * 0.25
     const running = driven || !!this.autopilot
     this.rpm = damp(this.rpm, running ? target : 0, 3, dt)
-    if (running && !this.engine) this.engine = audio.loop('engine', this.position)
+    if (running && !this.engine) this.engine = audio.loop('truck', this.position)
     if (!running && this.engine && Math.abs(this.speed) < 0.5) {
       this.engine.stop()
       this.engine = null

@@ -89,7 +89,7 @@ export interface WeaponDefinition {
   /** Radius in metres at which guards hear the shot. */
   noiseRadius: number
   /** Synth parameters for the layered shot sound. */
-  sound: { body: number; crack: number; gain: number; tail: number; mech: number }
+  sound: { file?: string; body: number; crack: number; gain: number; tail: number; mech: number }
   viewmodel: { kind: ViewModelKind; hip: Vector3Tuple; ads: Vector3Tuple; scale: number }
   /** Brass size multiplier; 0 = no ejection. */
   shell: number

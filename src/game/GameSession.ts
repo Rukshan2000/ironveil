@@ -30,7 +30,7 @@ import { GrenadeSystem } from '../weapons/GrenadeSystem'
 import { VehicleSystem } from '../vehicles/VehicleSystem'
 import { WeaponController } from '../weapons/WeaponController'
 import { LOADOUT } from '../weapons/definitions'
-import { Environment, PRESETS, type TimeOfDay } from '../world/environment'
+import { Environment, type TimeOfDay } from '../world/environment'
 import { Terrain } from '../world/terrain'
 import type { LevelLayout, PickupDef } from '../world/types'
 import { generateVegetation, type Vegetation } from '../world/vegetation'
@@ -66,6 +66,10 @@ export class GameSession {
   /** Weapon being switched to (current one is lowering). */
   pendingWeapon: number | null = null
   readonly grenades: GrenadeSystem
+  /** Slot 5: knife in hand instead of a gun. */
+  readonly knife = { equipped: false, swingAt: -99 }
+  /** Working a terminal / system: `using` is set each frame E is held on one; `blend` eases the hands and camera in and out. */
+  readonly terminal = { using: false, typing: false, at: new Vector3(), blend: 0, nextKey: 0 }
   readonly training: Training
   /** Bodies already searched for ammo. */
   readonly looted = new Set<string>()
@@ -132,7 +136,7 @@ export class GameSession {
     this.terrain = new Terrain(layout)
     this.vegetation = generateVegetation(layout, this.terrain)
     this.physics = new Physics([...layout.boxes, ...this.vegetation.colliders], this.terrain)
-    this.environment = new Environment(PRESETS[timeOfDay], layout, this.terrain, this.physics)
+    this.environment = new Environment(timeOfDay, layout, this.terrain, this.physics)
     this.nav = new NavGrid(layout.bounds, layout.boxes)
     this.coverPoints = buildCoverPoints(layout.boxes, this.nav)
     this.pickups = layout.pickups.map((p) => ({ ...p, taken: false }))
@@ -236,7 +240,8 @@ export class GameSession {
     if (this.recon.active) return base / this.recon.zoom
     const w = this.weapon
     const ads = (w.def.adsFov * base) / 72 / w.zoom
-    return base + (ads - base) * w.aim + this.player.fovKick * (1 - w.aim)
+    // leaning in to read a screen
+    return base + (ads - base) * w.aim + this.player.fovKick * (1 - w.aim) - this.terminal.blend * 16
   }
 
   update(dt: number) {
@@ -254,6 +259,7 @@ export class GameSession {
     this.timers = this.timers.filter((t) => t.at > this.time)
 
     const p = this.player
+    this.environment.tick(dt)
     if (p.active) {
       this.environment.update(p.chest(chest))
       const w = this.weapon

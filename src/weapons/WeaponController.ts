@@ -1,5 +1,6 @@
 import { clamp } from '../utils/math'
 import type { WeaponDefinition } from './types'
+import { cheats } from '../game/input'
 
 export type WeaponState = 'IDLE' | 'ADS' | 'FIRING' | 'RELOADING' | 'SPRINTING' | 'EMPTY' | 'INSPECTING' | 'EQUIPPING' | 'HOLSTERING' | 'CYCLING'
 
@@ -193,7 +194,7 @@ export class WeaponController {
       return pressed ? 'empty' : null
     }
     this.inspectTimer = 0
-    this.ammo--
+    if (!cheats.ammo) this.ammo--
     this.cooldown = 60 / this.def.fireRate
     this.bloom = Math.min(this.def.spread.maxBloom, this.bloom + this.def.spread.perShot)
     this.sinceShot = 0

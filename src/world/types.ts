@@ -1,3 +1,5 @@
+import type { GuardKind } from '../ai/guardBrain'
+import type { ComputerDef } from './computers'
 import type { Vector3Tuple } from 'three'
 
 export type MaterialKey =
@@ -40,6 +42,8 @@ export interface LampDef {
   yaw?: number
   /** Draw a post under the lamp head. */
   post?: boolean
+  /** Tall floodlight mast with several heads (big lit radius). */
+  tower?: boolean
 }
 
 export interface GuardSpawn {
@@ -54,6 +58,8 @@ export interface GuardSpawn {
   /** Squad membership (SquadSystem). */
   squad?: string
   leader?: boolean
+  /** Soldier type (default rifleman). */
+  kind?: GuardKind
 }
 
 export interface ReinforcementSource {
@@ -192,6 +198,8 @@ export interface LevelLayout {
   /** Reaction forces dispatched by the ReinforcementManager as the alert level rises. */
   reinforcements: { sources: ReinforcementSource[]; squads: ReinforcementSquadDef[]; maxActive: number; cooldown: number }
   interactables: InteractableDef[]
+  /** Workstations and server-rack faces (visual props; hackable ones link to an interactable). */
+  computers?: ComputerDef[]
   pickups: PickupDef[]
   doors: DoorDef[]
   cameras: CameraDef[]

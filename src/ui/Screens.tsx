@@ -17,7 +17,7 @@ const controls = (): [string, string][] => [
   [`${k('fire')} / ${k('aim')}`, 'Fire / Aim (hold)'], ['Wheel (aimed)', 'Optic zoom 1×–8×'], [k('reload'), 'Reload'], [k('inspect'), 'Inspect weapon'],
   [`${k('weapon1')} ${k('weapon2')} ${k('weapon3')} / wheel`, 'Carbine · Pistol · Marksman'], [`${k('grenade')} (hold) / ${k('cycleGrenade')}`, 'Throw · cycle frag/smoke/flash'],
   [k('interact'), 'Use · hold to hack / sabotage'], [k('binoculars'), 'Binoculars (tag, identify)'], [k('map'), 'Tactical map'],
-  [k('flashlight'), 'Flashlight'], [k('objectives'), 'Objectives'], ['Esc', 'Pause / settings'],
+  [k('flashlight'), 'Flashlight'], [k('nightVision'), 'Night vision'], [k('objectives'), 'Objectives'], ['Esc', 'Pause / settings'],
 ]
 
 function Overlay({ children, dim = true }: { children: React.ReactNode; dim?: boolean }) {

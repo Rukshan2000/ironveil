@@ -14,7 +14,7 @@ export function ValidationOverlay() {
   const session = useGameStore((s) => s.session)!
   useGameStore((s) => s.hud) // re-render with the HUD tick so live checks stay current
   const checks = useMemo(() => validateLevel(session.layout, session.def, session.nav), [session])
-  const baked = useMemo(() => bakeLevel(session.layout), [session])
+  const baked = useMemo(() => bakeLevel(session), [session])
   const p = session.player
   const onNav = session.nav.walkable(p.feet.x, p.feet.z)
   const sealed = session.security.doors.filter((d) => session.security.doorStatus(d) === 'LOCKED_BY_ALERT' && !d.def.hackTime && !d.def.forceTime)

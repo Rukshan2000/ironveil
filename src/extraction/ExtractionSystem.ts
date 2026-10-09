@@ -57,7 +57,7 @@ export class ExtractionSystem {
     const hover = lz.clone().setY(HOVER_HEIGHT - (HOVER_HEIGHT - 3.2) * (this.progress / this.total))
     this.heliPos.lerpVectors(APPROACH_FROM, hover, ease)
     this.heliYaw = Math.atan2(APPROACH_FROM.x - lz.x, APPROACH_FROM.z - lz.z)
-    this.rotor ??= audio.loop('engine', this.heliPos, 1.4)
+    this.rotor ??= audio.loop('rotor', this.heliPos, 1.4)
     this.rotor?.set('rate', 0.95)
     this.rotor?.move(this.heliPos)
 

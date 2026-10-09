@@ -63,6 +63,8 @@ export class GrenadeSystem {
   selected: GrenadeKind = 'frag'
   /** Pin pulled, waiting for release. */
   priming = false
+  /** Slot 4: grenade in hand instead of a gun — fire throws it. */
+  equipped = false
   /** Session time of the last throw (view-model animation). */
   thrownAt = -99
   /** Throw preview: world points along the arc. */
@@ -87,7 +89,20 @@ export class GrenadeSystem {
     const usable = p.active && p.alive && !s.recon.active && !p.vault
     if (!usable) this.priming = false
 
-    if (usable && input.pressed('cycleGrenade')) {
+    // slot 4: take a grenade in hand (pressing it again cycles the type)
+    const toHand = usable && input.pressed('weapon4') && !this.equipped
+    if (toHand) {
+      if (ORDER.some((k) => this.counts[k] > 0)) {
+        if (this.counts[this.selected] === 0) this.selected = ORDER.find((k) => this.counts[k] > 0)!
+        this.equipped = true
+        s.knife.equipped = false
+        s.pendingWeapon = null
+        s.weapon.lower()
+        audio.cloth(0.5)
+        s.notify(`${GRENADES[this.selected].name} in hand — ${this.counts[this.selected]} left`, 'info')
+      } else s.notify('No grenades left', 'warn')
+    }
+    if (usable && !toHand && (input.pressed('cycleGrenade') || (this.equipped && input.pressed('weapon4')))) {
       for (let i = 1; i <= ORDER.length; i++) {
         const k = ORDER[(ORDER.indexOf(this.selected) + i) % ORDER.length]
         if (this.counts[k] > 0 || i === ORDER.length) {
@@ -98,17 +113,18 @@ export class GrenadeSystem {
       audio.cloth(0.5)
       s.notify(`${GRENADES[this.selected].name} — ${this.counts[this.selected]} left`, 'info')
     }
-    if (usable && input.pressed('grenade') && !this.priming && this.handsBusy === 0) {
+    if (usable && (input.pressed('grenade') || (this.equipped && input.pressed('fire'))) && !this.priming && this.handsBusy === 0) {
       if (this.counts[this.selected] > 0) {
         this.priming = true
         s.weapon.holster()
         audio.pin()
       } else s.notify(`No ${GRENADES[this.selected].name.toLowerCase()}s left`, 'warn')
     }
-    if (this.priming) {
+    // the throw arc shows while the pin is pulled, and all the time while a grenade is in hand (slot 4)
+    if (this.priming || (this.equipped && usable && s.weapon.lowered)) {
       this.throwVelocity(dir)
       this.predict(this.throwOrigin(eye), dir)
-      if (!input.down('grenade')) this.throw()
+      if (this.priming && !input.down('grenade') && !(this.equipped && input.down('fire'))) this.throw()
     } else this.arcCount = 0
 
     for (const g of this.pool) if (g.active) this.step(g, dt)
@@ -195,6 +211,11 @@ export class GrenadeSystem {
     if (this.counts[this.selected] === 0) {
       const next = ORDER.find((k) => this.counts[k] > 0)
       if (next) this.selected = next
+      else if (this.equipped) {
+        // out of grenades: back to the gun
+        this.equipped = false
+        s.weapon.equip()
+      }
     }
   }
 

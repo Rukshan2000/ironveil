@@ -1,12 +1,13 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
-import { AdditiveBlending, Color, Group, Mesh, MeshBasicMaterial, PointLight, Vector3 } from 'three'
+import { AdditiveBlending, BufferGeometry, Color, Group, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, PointLight, Vector3 } from 'three'
 import type { AIState } from '../ai/guardBrain'
-import { TINT } from '../characters/GltfSoldier'
+import { loadEnemySoldier, TINT, type SoldierLook } from '../characters/GltfSoldier'
 import { useSoldierRig } from '../characters/useSoldierRig'
 import type { GameSession } from '../game/GameSession'
 import { useGameStore } from '../state/gameStore'
 import type { GuardEntity } from './guards'
+import { flashTexture } from '../weapons/WeaponView'
 
 const STATE_COLORS: Record<AIState, Color> = {
   IDLE: new Color('#5aa0ff'), PATROL: new Color('#5aa0ff'), SUSPICIOUS: new Color('#ffd040'), INVESTIGATE: new Color('#ffb040'),
@@ -14,10 +15,33 @@ const STATE_COLORS: Record<AIState, Color> = {
   CALL_REINFORCEMENTS: new Color('#ff40a0'), DEAD: new Color('#444444'),
 }
 const LOD_FAR = 45
+
+/** Dress by type and rank, so you can read a soldier before he opens fire. */
+function lookFor(g: GuardEntity): SoldierLook {
+  const look: SoldierLook = {
+    rifleman: { tint: TINT.enemy, head: 'helmet' as const },
+    heavy: { tint: '#3b4030', head: 'helmet' as const, vest: true, bulk: 1.08 },
+    sniper: { tint: '#5b5a40', head: 'boonie' as const },
+    rusher: { tint: '#2c313b', head: 'beanie' as const },
+  }[g.data.kind]
+  if (g.carries) return { ...look, tint: '#3d4250', head: 'cap' }
+  if (g.leader) return { ...look, head: g.data.kind === 'rifleman' ? 'beret' : look.head, armband: '#b02222' }
+  return look
+}
+const aimAt = new Vector3()
+/** Star-shaped soft flash shared by every guard's muzzle (a bare plane reads as a square). */
+let flashMap: ReturnType<typeof flashTexture> | null = null
 const ANIM_CULL = 110
 
 function GuardView({ guard, session, debug }: { guard: GuardEntity; session: GameSession; debug: boolean }) {
-  const rig = useSoldierRig(TINT.enemy)
+  const rig = useSoldierRig(useMemo(() => lookFor(guard), [guard]), loadEnemySoldier)
+  // sniper's laser: visible while he has you in his sights, brighter just before the shot
+  const laser = useMemo(() => {
+    const l = new Line(new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]), new LineBasicMaterial({ color: '#ff2a1a', transparent: true, opacity: 0.6, toneMapped: false }))
+    l.frustumCulled = false
+    l.visible = false
+    return l
+  }, [])
   const last = useRef({ rig, x: guard.data.position.x, z: guard.data.position.z })
   const root = useRef<Group>(null)
   const flash = useRef<Mesh>(null)
@@ -43,7 +67,19 @@ function GuardView({ guard, session, debug }: { guard: GuardEntity; session: Gam
     if (mx * mx + mz * mz > 1e-5) guard.anim.moveYaw = Math.atan2(-mx, -mz)
     last.current = { rig, x: d.position.x, z: d.position.z }
     // far guards animate only when on screen-ish range; corpses settle and freeze
-    if (fresh || (dist < ANIM_CULL && !(guard.anim.dead && guard.anim.sinceDeath > 2))) rig.update(Math.min(delta, 0.05), guard.anim)
+    if (fresh || (dist < ANIM_CULL && !(guard.anim.dead && guard.anim.sinceDeath > 6))) rig.update(Math.min(delta, 0.05), guard.anim)
+
+    laser.visible = d.kind === 'sniper' && d.state !== 'DEAD' && guard.debug.los && (d.state === 'COMBAT' || d.state === 'ALERT')
+    if (laser.visible) {
+      const o = session.coop.other
+      if (guard.target === 'peer') aimAt.copy(o.shown).setY(o.shown.y + 1.3)
+      else session.player.chest(aimAt)
+      const pos = laser.geometry.attributes.position
+      pos.setXYZ(0, rig.muzzle.x, rig.muzzle.y, rig.muzzle.z)
+      pos.setXYZ(1, aimAt.x, aimAt.y, aimAt.z)
+      pos.needsUpdate = true
+      ;(laser.material as LineBasicMaterial).opacity = d.fireCooldown < 0.7 ? 0.55 + Math.sin(session.time * 30) * 0.3 : 0.3
+    }
 
     const f = flash.current!
     f.visible = session.time - guard.muzzleTime < 0.05
@@ -61,11 +97,13 @@ function GuardView({ guard, session, debug }: { guard: GuardEntity; session: Gam
   })
 
   return (
+    <>
+    <primitive object={laser} />
     <group ref={root}>
       <primitive object={rig.root} />
       <mesh ref={flash} visible={false}>
         <planeGeometry args={[0.45, 0.45]} />
-        <meshBasicMaterial color="#ffcf70" blending={AdditiveBlending} transparent depthWrite={false} side={2} />
+        <meshBasicMaterial map={(flashMap ??= flashTexture())} color="#ffd8a0" blending={AdditiveBlending} transparent depthWrite={false} side={2} toneMapped={false} />
       </mesh>
       {debug && (
         <mesh ref={cone} position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -74,6 +112,7 @@ function GuardView({ guard, session, debug }: { guard: GuardEntity; session: Gam
         </mesh>
       )}
     </group>
+    </>
   )
 }
 

@@ -88,6 +88,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             <Toggle label="Post processing" k="postProcessing" />
             <Slider label="Resolution scale" k="resolutionScale" min={0.5} max={1.5} step={0.05} fmt={pct} />
             <Slider label="Field of view" k="fov" min={60} max={95} step={1} fmt={(v) => `${v}°`} />
+            <Slider label="Weapon position: left / right" k="weaponX" min={-6} max={6} step={0.5} fmt={(v) => `${v} cm`} />
+            <Slider label="Weapon position: down / up" k="weaponY" min={-6} max={6} step={0.5} fmt={(v) => `${v} cm`} />
+            <Slider label="Weapon position: closer / further" k="weaponZ" min={-6} max={6} step={0.5} fmt={(v) => `${v} cm`} />
           </>
         )}
         {tab === 'controls' && (

@@ -1,8 +1,9 @@
+import type { GuardKind } from '../ai/guardBrain'
 import {
   acUnit, barrel, barrelGroup, building, bush, container, crateStack, electricalBox, fence, forklift, fuelTank, generator,
   hangar, helipad, jersey, pallet, pipeRun, place, radioMast, roadLine, sandbags, stairs, tower, transformer, truck, utilityPole, wall,
 } from './builders'
-import type { AreaDef, BoxDef, CableDef, GuardSpawn, InteriorDef, LevelLayout, ReinforcementSquadDef } from './types'
+import type { AreaDef, BoxDef, CableDef, GuardSpawn, InteriorDef, LampDef, LevelLayout, ReinforcementSquadDef } from './types'
 
 /*
  * Base layout (x east, z south; the player approaches from the south).
@@ -174,7 +175,6 @@ const command: BoxDef[] = [
   ...wall(-39.7, -32.1, -30, CB.h, true, [], 'plaster', 0.2, 0xb4b09a),
   // furniture
   { p: [-20, 0.4, -38.9], s: [2.2, 0.8, 0.8], mat: 'metal', color: 0x3a3f44 }, // terminal desk
-  { p: [-20, 1.15, -39.15], s: [0.8, 0.55, 0.08], mat: 'metal', color: 0x1d2a22, collide: false }, // monitor
   { p: [-23.5, 0.95, -39.5], s: [1.2, 1.9, 0.5], mat: 'metal', color: 0x4c5048 }, // server rack
   { p: [-17.8, 1.0, -35], s: [0.6, 2.0, 1.8], mat: 'metal', color: 0x5a6050 }, // lockers
   { p: [-36, 0.38, -36], s: [2.4, 0.76, 1.2], mat: 'wood' }, // briefing table
@@ -202,11 +202,9 @@ const security: BoxDef[] = [
   // control room (west) / server room (east) partition
   ...wall(-54.7, -45.3, 43.5, 4.2, true, [{ at: 0, width: 1.2, top: 2.2, open: true }], 'plaster', 0.2, 0xa4a690),
   { p: [40.2, 0.4, -54.1], s: [4.4, 0.8, 0.8], mat: 'metal', color: 0x3a3f44 }, // control desk
-  ...[38.8, 40.2, 41.6].map((x): BoxDef => ({ p: [x, 1.15, -54.35], s: [0.9, 0.55, 0.06], mat: 'metal', color: 0x1d2a22, collide: false })),
   { p: [40, 0.45, -48.4], s: [2.2, 0.9, 1.4], mat: 'wood', color: 0x5a5040 }, // map table
   { p: [37.7, 1.1, -46.6], s: [0.6, 2.2, 1.4], mat: 'metal', color: 0x5a6050 }, // cabinet
   { p: [49.4, 0.45, -50], s: [0.8, 0.9, 2.2], mat: 'metal', color: 0x3a3f44 }, // radio console
-  { p: [49.6, 1.3, -50], s: [0.3, 0.8, 1.8], mat: 'metal', color: 0x2c3228, collide: false },
   ...[-53.2, -51.6, -48.4, -46.8].map((z): BoxDef => ({ p: [46, 1.0, z], s: [0.9, 2.0, 0.7], mat: 'metal', color: 0x2e3230 })), // server racks
   ...tower(54, -60, 7, Math.PI),
   ...generator(30, -60, Math.PI / 2),
@@ -266,8 +264,8 @@ const ditchBushes: BoxDef[] = [
 ].flatMap(([x, z], i) => bush(x, z, 1.6 + (i % 3) * 0.5))
 
 /** Reaction squad of `n` pooled guards waiting at a source. */
-function qrf(id: string, source: string, minLevel: number, n: number): ReinforcementSquadDef {
-  const guards: GuardSpawn[] = Array.from({ length: n }, (_, i) => ({ id: `${id}-${i + 1}`, patrol: [[0, 0, 0]], squad: id, leader: i === 0 }))
+function qrf(id: string, source: string, minLevel: number, n: number, kinds: GuardKind[] = []): ReinforcementSquadDef {
+  const guards: GuardSpawn[] = Array.from({ length: n }, (_, i) => ({ id: `${id}-${i + 1}`, patrol: [[0, 0, 0]], squad: id, leader: i === 0, kind: kinds[i] }))
   return { id, source, minLevel, guards }
 }
 
@@ -297,14 +295,39 @@ const boundary: BoxDef[] = [
   { p: [B, 20, 0], s: [1, 60, 2 * B], mat: 'invisible' },
 ]
 
+/**
+ * Night lighting: lamp posts along both sides of every road and tall floodlight towers round the fence and yards.
+ * Spots are generated, then dropped if they would stand in a building or right next to an existing lamp.
+ */
+function withRoadAndTowerLights(lamps: LampDef[]): LampDef[] {
+  const solid = BOXES.filter((b) => b.collide !== false && b.p[1] + b.s[1] / 2 > 0.8)
+  const clear = (x: number, z: number, margin: number) =>
+    !solid.some((b) => Math.abs(x - b.p[0]) < b.s[0] / 2 + margin && Math.abs(z - b.p[2]) < b.s[2] / 2 + margin)
+    && !lamps.some((l) => Math.hypot(l.position[0] - x, l.position[2] - z) < 7)
+  const add = (x: number, z: number, l: Omit<LampDef, 'position'> & { y: number }) => {
+    if (clear(x, z, l.tower ? 1.2 : 0.6)) lamps.push({ position: [x, l.y, z], radius: l.radius, post: l.post, tower: l.tower })
+  }
+  // posts along the roads, alternating sides
+  for (let z = 52, i = 0; z <= 140; z += 24, i++) add(i % 2 ? 6 : -6, z, { y: 6, radius: 10, post: true })
+  for (let z = 38, i = 0; z >= -52; z -= 18, i++) add(i % 2 ? 5.6 : -5.6, z, { y: 6, radius: 10, post: true })
+  for (let x = -54, i = 0; x <= 58; x += 18, i++) add(x, i % 2 ? 13 : 2.2, { y: 6, radius: 10, post: true })
+  // floodlight towers: fence corners, fence midpoints, yards
+  for (const [x, z] of [[-57, 39], [61, 39], [-57, -61], [61, -61], [-57, -30], [61, -36], [-24, 39], [30, 39], [-28, -61], [16, -61], [-12, 22], [22, -30], [-30, 8.5]] as const) {
+    add(x, z, { y: 12, radius: 18, tower: true })
+  }
+  return lamps
+}
+
+const BOXES: BoxDef[] = [
+  ...perimeter, ...outside, ...checkpoint, ...roadBoxes, ...motorPool, ...barracks, ...warehouse, ...catwalk,
+  ...yard, ...command, ...security, ...maintenance, ...powerStation, ...extraction, ...poles, ...ditchBushes, ...boundary,
+]
+
 export const compoundLayout: LevelLayout = {
   playerStart: [-1.5, 0.2, 128],
   playerYaw: 0,
-  boxes: [
-    ...perimeter, ...outside, ...checkpoint, ...roadBoxes, ...motorPool, ...barracks, ...warehouse, ...catwalk,
-    ...yard, ...command, ...security, ...maintenance, ...powerStation, ...extraction, ...poles, ...ditchBushes, ...boundary,
-  ],
-  lamps: [
+  boxes: BOXES,
+  lamps: withRoadAndTowerLights([
     { position: [-5.5, 6.5, 43], radius: 11, realLight: true, post: true },
     { position: [6.5, 6, 30], radius: 8, post: true },
     { position: [6.5, 6, 2], radius: 9, realLight: true, post: true },
@@ -324,30 +347,34 @@ export const compoundLayout: LevelLayout = {
     { position: [40.5, 3.9, -50], radius: 4 },
     { position: [59, 3.3, -16], radius: 3 },
     { position: [60.4, 6, -46], radius: 7, post: true },
-  ],
+    // extra yard lighting so the base is lit up after dark (spots checked clear of buildings)
+    ...([[6.5, 16], [6.5, -14], [-46, 30], [-20, 14], [50, 14], [12, -21], [-34, -18], [-52, -36], [-38, -56], [-58, -50],
+      [30, -58], [54, -40], [66, -30], [0, 56], [-14, 40], [14, 40], [-25, -2], [-8, -22]] as const)
+      .map(([x, z]) => ({ position: [x, 6, z] as [number, number, number], radius: 9, post: true })),
+  ]),
   guards: [
     // gate squad
-    { id: 'tower-south', patrol: [[14, 6.13, 62]], faceTowards: [2, 110], visionRange: 55, squad: 'gate' },
+    { id: 'tower-south', patrol: [[14, 6.13, 62]], faceTowards: [2, 110], visionRange: 55, squad: 'gate', kind: 'sniper' },
     { id: 'gate-west', patrol: [[-6.5, 0, 47.5]], faceTowards: [-3, 90], squad: 'gate' },
     { id: 'gate-east', patrol: [[6, 0, 41], [6, 0, 30]], waitTime: 6, squad: 'gate', leader: true },
-    { id: 'outer-patrol', patrol: [[-14, 0, 49], [-68, 0, 49], [-68, 0, -26], [-68, 0, 20]], waitTime: 4, squad: 'gate' },
+    { id: 'outer-patrol', patrol: [[-14, 0, 49], [-68, 0, 49], [-68, 0, -26], [-68, 0, 20]], waitTime: 4, squad: 'gate', kind: 'rusher' },
     // motor pool / yard
     { id: 'yard', patrol: [[0, 0, 30], [0, 0, -20], [12, 0, -21], [12, 0, 12]], waitTime: 3, squad: 'motor', leader: true },
-    { id: 'motor-pool', patrol: [[-20, 0, 21], [-46, 0, 35], [-46, 0, 14]], waitTime: 4, squad: 'motor' },
+    { id: 'motor-pool', patrol: [[-20, 0, 21], [-46, 0, 35], [-46, 0, 14]], waitTime: 4, squad: 'motor', kind: 'rusher' },
     // barracks
-    { id: 'barracks', patrol: [[34, 0, 32]], faceTowards: [20, 44], squad: 'barracks' },
+    { id: 'barracks', patrol: [[34, 0, 32]], faceTowards: [20, 44], squad: 'barracks', kind: 'heavy' },
     { id: 'barracks-patrol', patrol: [[22, 0, 14], [54, 0, 14], [60, 0, 38]], waitTime: 3, squad: 'barracks', leader: true },
     // warehouse
     { id: 'warehouse-door', patrol: [[21, 0, -9]], faceTowards: [6, -6], squad: 'warehouse' },
     { id: 'officer', patrol: [[45, 0, -4], [33, 0, -4], [33, 0, -16]], waitTime: 5, carries: 'sec-card', squad: 'warehouse', leader: true },
     // command / admin
     { id: 'command-hall', patrol: [[-40, 0, -27], [-20, 0, -27], [-24, 0, -36]], waitTime: 4, squad: 'command', leader: true },
-    { id: 'command-west', patrol: [[-48, 0, -20], [-48, 0, -44], [-34, 0, -46]], waitTime: 4, squad: 'command' },
-    { id: 'helipad', patrol: [[-44, 0, -45]], faceTowards: [-28, -20], squad: 'command' },
+    { id: 'command-west', patrol: [[-48, 0, -20], [-48, 0, -44], [-34, 0, -46]], waitTime: 4, squad: 'command', kind: 'rusher' },
+    { id: 'helipad', patrol: [[-44, 0, -45]], faceTowards: [-28, -20], squad: 'command', kind: 'heavy' },
     // security compound
-    { id: 'sec-gate', patrol: [[21, 0, -47]], faceTowards: [8, -46], squad: 'compound' },
+    { id: 'sec-gate', patrol: [[21, 0, -47]], faceTowards: [8, -46], squad: 'compound', kind: 'heavy' },
     { id: 'sec-yard', patrol: [[30, 0, -36], [54, 0, -36], [54, 0, -42], [30, 0, -58]], waitTime: 3, squad: 'compound', leader: true },
-    { id: 'sec-tower', patrol: [[54, 7.13, -60]], faceTowards: [36, -36], visionRange: 45, squad: 'compound' },
+    { id: 'sec-tower', patrol: [[54, 7.13, -60]], faceTowards: [36, -36], visionRange: 45, squad: 'compound', kind: 'sniper' },
     { id: 'comms-tech', patrol: [[40, 0, -47], [40, 0, -52.5], [41, 0, -50]], waitTime: 7, squad: 'compound' },
     // power station / maintenance
     { id: 'power-lead', patrol: [[60.5, 0, -27], [60.5, 0, -58], [64.8, 0, -50]], waitTime: 5, squad: 'power', leader: true },
@@ -363,16 +390,29 @@ export const compoundLayout: LevelLayout = {
       { id: 'convoy', label: 'the south road', position: [0, 0, 14], convoy: { vehicle: 'convoy-truck', route: 'convoy' } },
     ],
     squads: [
-      qrf('qrf-1', 'barracks', 3, 4),
-      qrf('convoy', 'convoy', 3, 3),
-      qrf('qrf-2', 'compound', 4, 3),
-      qrf('qrf-3', 'motor-pool', 4, 3),
+      qrf('qrf-1', 'barracks', 3, 4, ['rifleman', 'heavy', 'rusher', 'rusher']),
+      qrf('convoy', 'convoy', 3, 3, ['rifleman', 'heavy', 'rifleman']),
+      qrf('qrf-2', 'compound', 4, 3, ['rifleman', 'rusher', 'heavy']),
+      qrf('qrf-3', 'motor-pool', 4, 3, ['rifleman', 'rusher', 'rusher']),
     ],
   },
   interactables: [
     { id: 'intel-terminal', position: [-20, 1, -38.3], label: 'download intel' },
     { id: 'comms-terminal', position: [49, 1, -50], label: 'download traffic logs' },
     { id: 'uplink-breaker', position: [62, 1.2, -46], label: 'sabotage uplink transformer' },
+  ],
+  computers: [
+    { kind: 'workstation', position: [-20, 0.8, -39], yaw: 0, id: 'intel-terminal', title: 'CMD-NET // INTEL ARCHIVE' },
+    { kind: 'workstation', position: [38.8, 0.8, -54.2], yaw: 0, title: 'PERIMETER CAMS' },
+    { kind: 'workstation', position: [40.2, 0.8, -54.2], yaw: 0, title: 'SECURITY GRID' },
+    { kind: 'workstation', position: [41.6, 0.8, -54.2], yaw: 0, title: 'RADIO NET' },
+    { kind: 'workstation', position: [49.45, 0.9, -50.45], yaw: -Math.PI / 2, id: 'comms-terminal', title: 'COMMS RELAY // TRAFFIC' },
+    { kind: 'workstation', position: [49.45, 0.9, -49.55], yaw: -Math.PI / 2, title: 'UPLINK STATUS' },
+    { kind: 'rack', position: [-23.5, 0, -39.24], yaw: 0, size: [1.2, 1.9] },
+    ...[-53.2, -51.6, -48.4, -46.8].flatMap((z) => [
+      { kind: 'rack' as const, position: [46, 0, z + 0.36] as [number, number, number], yaw: 0, size: [0.9, 2] as [number, number] },
+      { kind: 'rack' as const, position: [46, 0, z - 0.36] as [number, number, number], yaw: Math.PI, size: [0.9, 2] as [number, number] },
+    ]),
   ],
   pickups: [{ id: 'sec-card', position: [47.2, 0.85, -6.6], label: 'security keycard' }],
   doors: [

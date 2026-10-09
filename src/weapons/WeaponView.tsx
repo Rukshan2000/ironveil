@@ -7,7 +7,9 @@ import { buildViewModel } from '../assets/weaponModels'
 import type { GameSession } from '../game/GameSession'
 import type { ViewModelTarget } from '../game/RenderPipeline'
 import { damp } from '../utils/math'
+import { settings } from '../state/settings'
 import type { WeaponController } from './WeaponController'
+import { KNIFE } from './knife'
 
 /** Critically-damped-ish spring for view-model recoil. */
 class Spring {
@@ -28,7 +30,7 @@ const smooth = (x: number) => {
 /** 0→1 over [a,b], 1→0 over [c,d]. */
 const window4 = (x: number, a: number, b: number, c: number, d: number) => smooth((x - a) / (b - a)) * (1 - smooth((x - c) / (d - c)))
 
-function flashTexture() {
+export function flashTexture() {
   const c = document.createElement('canvas')
   c.width = c.height = 128
   const g = c.getContext('2d')!
@@ -66,6 +68,8 @@ export function WeaponView({ session, vm }: { session: GameSession; vm: ViewMode
   const holder = useRef<Group>(null)
   const flash = useRef<Mesh>(null)
   const nade = useRef<Mesh>(null)
+  const knife = useRef<Group>(null)
+  const hands = useRef<Group>(null)
   const worldLight = useRef<PointLight>(null)
   const sun = useRef<DirectionalLight>(null)
   const hemi = useRef<HemisphereLight>(null)
@@ -96,7 +100,7 @@ export function WeaponView({ session, vm }: { session: GameSession; vm: ViewMode
       flash.current!.position.copy(model.muzzle)
       state.lastWeapon = weapon
     }
-    const show = player.active && !session.recon.active && !(def.scope && weapon.aim > 0.85)
+    const show = player.active && !session.recon.active && !(def.scope && weapon.aim > 0.85) && !((session.grenades.equipped || session.knife.equipped) && weapon.lowered)
     g.visible = show
 
     // ---- inputs
@@ -132,6 +136,9 @@ export function WeaponView({ session, vm }: { session: GameSession; vm: ViewMode
     const px = hip[0] + (ads[0] - hip[0]) * aim
     const py = hip[1] + (ads[1] - hip[1]) * aim
     const pz = hip[2] + (ads[2] - hip[2]) * aim
+    // player's preferred hip position (settings, cm); fades out when aiming so the sight stays centred
+    const pref = settings()
+    const custom = (1 - aim) / 100
     let ox = bx + state.swayX * 0.04 + kx * 0.4 + sprint * 0.03 - state.crouch * 0.01 * (1 - aim)
     let oy = by + breath + state.swayY * 0.04 - sprint * 0.06 - player.landingDip * 0.25 - state.crouch * 0.008 * (1 - aim)
     let oz = kz + sprint * 0.04
@@ -160,9 +167,45 @@ export function WeaponView({ session, vm }: { session: GameSession; vm: ViewMode
     oy -= busy * 0.2
     rx -= busy * 0.45
     ox += busy * 0.05
+    // working a terminal: the weapon drops out of view and both hands come up onto the keyboard and mouse
+    const work = smooth(Math.min(1, session.terminal.blend))
+    oy -= work * 0.3
+    rx -= work * 0.8
+    const hg = hands.current!
+    hg.visible = player.active && work > 0.02
+    if (hg.visible) {
+      const t = session.time
+      const [left, right, mouse] = hg.children
+      const typing = session.terminal.typing
+      // left hand: quick uneven key taps; right hand: drifts the mouse around and clicks now and then
+      const tap = typing ? Math.max(0, Math.sin(t * 23) * Math.sin(t * 7.3 + 1)) * 0.01 : 0
+      left.position.set(-0.11 + Math.sin(t * 2.1) * 0.006, -0.21 + tap + (1 - work) * -0.25, -0.38)
+      left.rotation.set(-0.35, 0.25, 0.1 + Math.sin(t * 17) * (typing ? 0.06 : 0))
+      const mx = Math.sin(t * 1.3) * 0.02 + Math.sin(t * 3.7) * 0.006, mz = Math.cos(t * 0.9) * 0.012
+      const click = typing && Math.sin(t * 2.6) > 0.97 ? 0.004 : 0
+      right.position.set(0.17 + mx, -0.215 - click + (1 - work) * -0.25, -0.37 + mz)
+      right.rotation.set(-0.3, -0.2, -0.05)
+      mouse.position.set(0.17 + mx, -0.235 + (1 - work) * -0.25, -0.36 + mz)
+      mouse.visible = typing
+      if (!typing) {
+        // hands on a panel or a door: both pushed forward, working at it
+        left.position.z -= 0.08
+        right.position.set(0.11, -0.19 + Math.sin(t * 9) * 0.008 + (1 - work) * -0.25, -0.44)
+      }
+    }
+
+    // knife: held low on the right, blade forward; a stab thrusts it out and back
+    const kn = knife.current!
+    kn.visible = player.active && session.knife.equipped && weapon.lowered
+    if (kn.visible) {
+      const t = (session.time - session.knife.swingAt) / KNIFE.swing
+      const thrust = t < 1 ? Math.sin(Math.min(1, t) * Math.PI) : 0
+      kn.position.set(0.13 - thrust * 0.08 + bx, -0.16 + thrust * 0.05 + by, -0.32 - thrust * 0.28)
+      kn.rotation.set(-0.15 + thrust * 0.25, 0.25 - thrust * 0.2, -0.3 + thrust * 0.3)
+    }
     const sinceThrow = session.time - session.grenades.thrownAt
     const ng = nade.current!
-    ng.visible = player.active && (session.grenades.priming || sinceThrow < 0.18)
+    ng.visible = player.active && (session.grenades.priming || sinceThrow < 0.18 || (session.grenades.equipped && weapon.lowered))
     if (ng.visible) {
       const t = session.grenades.priming ? 0 : sinceThrow / 0.18
       ng.position.set(-0.14 + t * 0.06, -0.15 + t * 0.14 + Math.sin(session.time * 2) * 0.003, -0.42 - t * 0.6)
@@ -232,7 +275,7 @@ export function WeaponView({ session, vm }: { session: GameSession; vm: ViewMode
       oz += a * 0.05
     }
 
-    g.position.set(px + ox, py + oy, pz + oz)
+    g.position.set(px + ox + pref.weaponX * custom, py + oy + pref.weaponY * custom, pz + oz - pref.weaponZ * custom)
     g.rotation.set(rx, ry, rz)
 
     // ---- muzzle flash (vm) + one world light that toggles intensity (no shader recompiles)
@@ -261,7 +304,8 @@ export function WeaponView({ session, vm }: { session: GameSession; vm: ViewMode
     const amb = (env.playerIndoors ? 0.45 : 1) * (0.7 + env.preset.hemiIntensity * 2.2) + env.lampLight(player.feet) * 0.8
     hemi.current!.intensity = amb + (player.flashlight ? 0.4 : 0) + (firing ? 1.5 : 0)
     hemi.current!.color.copy(tmpColor.set(env.preset.hemiSky))
-    vm.scene.environmentIntensity = env.preset.envIntensity * (env.playerIndoors ? 0.15 : 0.4)
+    // the weapon is mostly metal, lit by reflections: keep a floor so it reads at dusk, at night and indoors
+    vm.scene.environmentIntensity = Math.max(0.55, env.preset.envIntensity * (env.playerIndoors ? 0.6 : 1.1))
 
     vmCamera.aspect = size.width / size.height
     vmCamera.fov = 52 - aim * 8
@@ -280,6 +324,46 @@ export function WeaponView({ session, vm }: { session: GameSession; vm: ViewMode
             <cylinderGeometry args={[0.022, 0.022, 0.07, 12]} />
             <meshStandardMaterial color="#4d5640" roughness={0.6} metalness={0.3} />
           </mesh>
+          <group ref={hands} visible={false}>
+            {[0, 1].map((i) => (
+              <group key={i}>
+                <mesh>
+                  <boxGeometry args={[0.07, 0.03, 0.1]} />
+                  <meshStandardMaterial color="#25261f" roughness={0.9} />
+                </mesh>
+                <mesh position={[0, 0.002, -0.06]}>
+                  <boxGeometry args={[0.065, 0.018, 0.05]} />
+                  <meshStandardMaterial color="#2c2d26" roughness={0.9} />
+                </mesh>
+                <mesh position={[0, -0.01, 0.17]} rotation-x={Math.PI / 2}>
+                  <capsuleGeometry args={[0.035, 0.2, 4, 10]} />
+                  <meshStandardMaterial color="#4b5038" roughness={0.95} />
+                </mesh>
+              </group>
+            ))}
+            <mesh>
+              <boxGeometry args={[0.055, 0.022, 0.09]} />
+              <meshStandardMaterial color="#1b1c1e" roughness={0.5} />
+            </mesh>
+          </group>
+          <group ref={knife} visible={false}>
+            <mesh position={[0, 0, -0.1]}>
+              <boxGeometry args={[0.006, 0.028, 0.15]} />
+              <meshStandardMaterial color="#9aa0a6" roughness={0.25} metalness={0.9} />
+            </mesh>
+            <mesh position={[0, -0.002, 0.005]}>
+              <boxGeometry args={[0.05, 0.012, 0.012]} />
+              <meshStandardMaterial color="#222" roughness={0.6} />
+            </mesh>
+            <mesh position={[0, -0.002, 0.065]}>
+              <boxGeometry args={[0.022, 0.03, 0.11]} />
+              <meshStandardMaterial color="#1c1d1a" roughness={0.9} />
+            </mesh>
+            <mesh position={[0, -0.01, 0.07]}>
+              <boxGeometry args={[0.06, 0.06, 0.08]} />
+              <meshStandardMaterial color="#25261f" roughness={0.9} />
+            </mesh>
+          </group>
           <mesh ref={flash} visible={false}>
             <planeGeometry args={[0.2, 0.2]} />
             <meshBasicMaterial map={flashMap} color="#ffd8a0" blending={AdditiveBlending} transparent depthWrite={false} toneMapped={false} />

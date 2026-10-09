@@ -1,13 +1,14 @@
 import { Vector3 } from 'three'
 import { findCover } from '../ai/cover'
-import { AI, createGuard, updateGuardBrain, type AIWorld, type BrainOutput, type Callout, type GuardData, type Noise, type Perception } from '../ai/guardBrain'
+import { AI, createGuard, KINDS, updateGuardBrain, type AIWorld, type BrainOutput, type Callout, type GuardData, type GuardKind, type Noise, type Perception } from '../ai/guardBrain'
 import { computeExposure, hearing } from '../ai/perception'
 import { audio, type VoiceSound } from '../audio/AudioSystem'
 import type { AnimState } from '../characters/types'
 import type { GameSession } from '../game/GameSession'
 import type { Character, Physics } from '../physics/Physics'
 import { damp, turnTowards, wrapAngle, yawTo } from '../utils/math'
-import { AR_K7 } from '../weapons/definitions'
+import { AR_K7, P_11, VK_8 } from '../weapons/definitions'
+import type { WeaponDefinition } from '../weapons/types'
 import type { GuardSpawn } from '../world/types'
 
 const HALF_STAND = 0.55
@@ -15,7 +16,13 @@ const HALF_CROUCH = 0.25
 const RADIUS = 0.35
 const EYE = { stand: 1.62, crouch: 1.1 }
 const GRAVITY = 20
-export const GUARD_DAMAGE = 8
+/** What each soldier type shoots: weapon (ballistics + sound), damage per hit, and spread multiplier (lower = more accurate). */
+export const GUARD_GUNS: Record<GuardKind, { def: WeaponDefinition; damage: number; spread: number }> = {
+  rifleman: { def: AR_K7, damage: 8, spread: 1 },
+  heavy: { def: AR_K7, damage: 9, spread: 1.35 },
+  sniper: { def: VK_8, damage: 42, spread: 0.18 },
+  rusher: { def: P_11, damage: 6, spread: 1.2 },
+}
 const RADIO_RANGE = 45
 const SHOUT_RANGE = 14
 /** Radio range once the uplink is down. */
@@ -24,6 +31,8 @@ const LOCAL_RADIO = 20
 const THINK_INTERVAL = (dist: number) => (dist > 90 ? 0.3 : dist > 45 ? 0.12 : 0)
 const PATH_BUDGET = 3
 const BODY_SIGHT = 20
+/** How quickly guards reach their target velocity (higher = snappier). */
+const ACCEL = 4
 
 export interface GuardEntity {
   data: GuardData
@@ -40,6 +49,8 @@ export interface GuardEntity {
   heardBuf: { noise: Noise; loud: number } | null
   vy: number
   stuckTime: number
+  /** Horizontal velocity, eased towards the brain's requested speed. */
+  vel: Vector3
   muzzleTime: number
   crouched: boolean
   path: Vector3[] | null
@@ -70,16 +81,18 @@ export function createGuardEntity(physics: Physics, spawn: GuardSpawn, active = 
   const patrol = spawn.patrol.map((p) => new Vector3(...p))
   const [fx, fz] = spawn.faceTowards ?? [patrol[0].x, patrol[0].z - 1]
   const yaw = yawTo(fx - patrol[0].x, fz - patrol[0].z)
-  const data = createGuard(spawn.id, patrol, yaw, spawn.waitTime ?? 3, spawn.visionRange)
+  const kind = spawn.kind ?? 'rifleman'
+  // snipers see further (scoped)
+  const data = createGuard(spawn.id, patrol, yaw, spawn.waitTime ?? 3, (spawn.visionRange ?? 30) * (kind === 'sniper' ? 1.5 : 1), kind)
   const character = physics.createCapsule(data.position.clone().setY(data.position.y + HALF_STAND + RADIUS), HALF_STAND, RADIUS, { kind: 'guard', id: spawn.id })
   if (!active) {
     character.collider.setEnabled(false)
     data.state = 'IDLE'
   }
   return {
-    data, character, active, carries: spawn.carries, squad: spawn.squad, leader: spawn.leader, thinkAcc: Math.random() * 0.1, lastOut: null, heardBuf: null, vy: 0, stuckTime: 0, muzzleTime: -999, crouched: false,
+    data, character, active, carries: spawn.carries, squad: spawn.squad, leader: spawn.leader, thinkAcc: Math.random() * 0.1, lastOut: null, heardBuf: null, vy: 0, vel: new Vector3(), stuckTime: 0, muzzleTime: -999, crouched: false,
     path: null, pathGoal: new Vector3(), pathTimer: 0, damaged: false, underFire: false, trackTime: 0, voiceCooldown: 0,
-    bodyTimer: Math.random(), intelTime: 0, stun: 0, armor: spawn.leader ? 40 : 0, evade: null, target: 'local', debug: { exposure: 0, los: false },
+    bodyTimer: Math.random(), intelTime: 0, stun: 0, armor: Math.max(KINDS[kind].armor, spawn.leader ? 40 : 0), evade: null, target: 'local', debug: { exposure: 0, los: false },
     anim: { speed: 0, crouch: 0, aim: 0, sinceShot: 99, reload: -1, radio: false, turnRate: 0, lookYaw: 0, sinceHit: 99, dead: false, sinceDeath: 0, deathDir: new Vector3(0, 0, 1), yaw },
   }
 }
@@ -100,11 +113,12 @@ export function damageGuard(s: GameSession, g: GuardEntity, amount: number, dir:
   }
   d.health -= amount
   g.anim.sinceHit = 0
+  g.anim.deathDir.copy(dir) // also the hit direction, for the flinch
+  g.vel.multiplyScalar(0.25) // a round stops you mid-stride
   if (d.health <= 0) {
     d.state = 'DEAD'
     g.anim.dead = true
     g.anim.sinceDeath = 0
-    g.anim.deathDir.copy(dir)
     g.character.collider.setEnabled(false)
     if (d.cover) d.cover.takenBy = null
     if (s.security.caller === d.id) s.security.caller = null
@@ -140,6 +154,7 @@ const eye = new Vector3()
 const target = new Vector3()
 const dir = new Vector3()
 const delta = new Vector3()
+const wish = new Vector3()
 const muzzle = new Vector3()
 const look = new Vector3()
 
@@ -266,7 +281,7 @@ function perceive(s: GameSession, g: GuardEntity, dt: number): Perception {
     beam = look.dot(dir) > 0.85
   }
   let exposure = computeExposure({
-    distance, range: d.visionRange, angle, fov: d.fov, hasLineOfSight: los, speed: p.active ? p.speed : 8,
+    distance, range: d.visionRange * s.environment.sightFactor, angle, fov: d.fov, hasLineOfSight: los, speed: p.active ? p.speed : 8,
     crouching: p.crouching, prone: p.prone, light: s.environment.playerLight + (p.flashlight ? 0.25 : 0), flashlightAtGuard: beam, alertness: d.alertness,
   })
   if (!p.active && los) exposure = Math.max(exposure, 0.8)
@@ -284,7 +299,7 @@ function perceive(s: GameSession, g: GuardEntity, dt: number): Perception {
     const ang = Math.abs(wrapAngle(yawTo(target.x - eye.x, target.z - eye.z) - d.yaw))
     const seen = dist < d.visionRange * 2.2 && (ang < d.fov / 2 + 0.2 || dist < 6) && canSee(s, g, target)
     const ex = computeExposure({
-      distance: dist, range: d.visionRange, angle: ang, fov: d.fov, hasLineOfSight: seen, speed: o.speed,
+      distance: dist, range: d.visionRange * s.environment.sightFactor, angle: ang, fov: d.fov, hasLineOfSight: seen, speed: o.speed,
       crouching: o.stance === 1, prone: o.stance === 2, light: s.environment.playerLight, flashlightAtGuard: false, alertness: d.alertness,
     })
     if (seen && (ex > exposure || !los)) {
@@ -380,11 +395,20 @@ function move(s: GameSession, g: GuardEntity, out: BrainOutput, dt: number) {
     const dx = wp.x - d.position.x, dz = wp.z - d.position.z
     const dist = Math.hypot(dx, dz)
     if (dist > 0.25) {
-      requested = Math.min(dist, out.speed * (g.crouched ? 0.55 : 1) * dt)
-      delta.set((dx / dist) * requested, 0, (dz / dist) * requested)
-    }
+      // ease into the target speed and slow down on arrival; no instant 0 → jog or reversals
+      const want = Math.min(out.speed * (g.crouched ? 0.55 : 1), (Math.hypot(goal.x - d.position.x, goal.z - d.position.z) + 0.3) * 2)
+      wish.set((dx / dist) * want, 0, (dz / dist) * want)
+    } else wish.set(0, 0, 0)
     s.security.guardOpensDoors(d.position)
-  } else g.path = null
+  } else {
+    g.path = null
+    wish.set(0, 0, 0)
+  }
+  g.vel.x = damp(g.vel.x, wish.x, ACCEL, dt)
+  g.vel.z = damp(g.vel.z, wish.z, ACCEL, dt)
+  delta.set(g.vel.x * dt, 0, g.vel.z * dt)
+  requested = delta.length()
+  if (requested < 0.0005) requested = 0
 
   // keep a little personal space from other guards
   for (const o of s.guards) {
@@ -400,6 +424,8 @@ function move(s: GameSession, g: GuardEntity, out: BrainOutput, dt: number) {
   if (s.physics.moveCharacter(g.character, delta)) g.vy = 0
   d.position.add(delta)
   const moved = Math.hypot(delta.x, delta.z)
+  // blocked by a wall: lose the momentum instead of pushing into it
+  if (requested > 0 && moved < requested * 0.5) g.vel.multiplyScalar(moved / requested)
   g.anim.speed = damp(g.anim.speed, moved / dt, 10, dt)
 
   g.stuckTime = requested > 0 && moved < requested * 0.25 ? g.stuckTime + dt : 0
@@ -413,7 +439,7 @@ function move(s: GameSession, g: GuardEntity, out: BrainOutput, dt: number) {
 
   const lookYaw = out.lookAt ? yawTo(out.lookAt.x - d.position.x, out.lookAt.z - d.position.z) : out.lookYaw ?? moveYaw
   const hostile = d.state === 'COMBAT' || d.state === 'ALERT' || d.state === 'RETREAT'
-  const turnRate = hostile ? 6 : d.state === 'SUSPICIOUS' ? 3.5 : 2.4
+  const turnRate = hostile ? 3.6 : d.state === 'SUSPICIOUS' ? 2.6 : 2
   const prev = d.yaw
   if (lookYaw !== null) d.yaw = turnTowards(d.yaw, lookYaw, turnRate * dt)
   g.anim.turnRate = damp(g.anim.turnRate, wrapAngle(d.yaw - prev) / dt, 12, dt)
@@ -450,16 +476,19 @@ function shoot(s: GameSession, g: GuardEntity) {
   else target.copy(s.vehicles.driving!.position).setY(s.vehicles.driving!.position.y + 1)
   const distance = muzzle.distanceTo(target)
   // accuracy: worse at range, against movers, in the dark, right after spotting, and while being hit
-  const err = 0.22 + distance * 0.018 + (g.target === 'peer' ? o.speed : p.speed) * 0.1 + Math.max(0, 1.6 - g.trackTime * 0.55)
-    + (g.anim.sinceHit < 1 ? 0.5 : 0) + (s.environment.playerLight < 0.3 ? 0.3 : 0) - (p.crouching ? 0.05 : 0)
+  const gun = GUARD_GUNS[d.kind]
+  // rushers' SMGs spray at range; snipers barely care about distance
+  const rangeErr = d.kind === 'rusher' ? 0.03 : d.kind === 'sniper' ? 0.006 : 0.018
+  const err = (0.22 + distance * rangeErr + Math.max(0, 1.6 - g.trackTime * 0.55) + (g.anim.sinceHit < 1 ? 0.5 : 0) + (s.environment.playerLight < 0.3 ? 0.3 : 0)) * gun.spread
+    + (g.target === 'peer' ? o.speed : p.speed) * 0.1 - (p.crouching ? 0.05 : 0)
   dir.randomDirection().multiplyScalar(Math.random() * err)
   target.add(dir)
   dir.subVectors(target, muzzle).normalize()
   s.coop.guardShot(s.guards.indexOf(g), muzzle, dir)
-  s.ballistics.fire(muzzle, dir, AR_K7.ballistics, GUARD_DAMAGE, { head: 1.5, limb: 0.75 }, { kind: 'guard', id: d.id }, g.character.collider, true)
+  s.ballistics.fire(muzzle, dir, gun.def.ballistics, gun.damage, { head: 1.5, limb: 0.75 }, { kind: 'guard', id: d.id }, g.character.collider, true)
   g.muzzleTime = s.time
   g.anim.sinceShot = 0
-  audio.gunshot(AR_K7.sound, muzzle)
+  audio.gunshot(gun.def.sound, muzzle)
   s.effects.muzzle(muzzle, dir, 0.6)
   s.noises.push({ position: d.position.clone(), kind: 'gunshot', radius: 40 })
 }
@@ -469,7 +498,7 @@ function animate(g: GuardEntity, out: BrainOutput, dt: number) {
   const d = g.data
   a.crouch = damp(a.crouch, g.crouched ? 1 : 0, 8, dt)
   a.aim = damp(a.aim, out.aiming || d.state === 'COMBAT' ? 1 : 0, 6, dt)
-  a.reload = d.reloadTimer > 0 ? 1 - d.reloadTimer / AI.reloadTime : -1
+  a.reload = d.reloadTimer > 0 ? 1 - d.reloadTimer / KINDS[d.kind].reload : -1
   a.radio = out.radio
   a.yaw = d.yaw
 }

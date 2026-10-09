@@ -12,6 +12,7 @@ import { BriefingScreen, LoadingScreen, MainMenu, PauseScreen, ResultsScreen } f
 import { TacticalMapOverlay } from '../ui/TacticalMap'
 import { IntroOverlay } from '../game/IntroCinematic'
 import { CoopChat } from '../ui/CoopChat'
+import { briefingRoom } from '../game/BriefingRoom'
 
 export function App() {
   const phase = useGameStore((s) => s.phase)
@@ -20,6 +21,7 @@ export function App() {
   const validationOpen = useGameStore((s) => s.validationOpen)
 
   useEffect(() => attachInput(), [])
+  useEffect(() => briefingRoom.load(), []) // fetch EVA early so she's there when the briefing starts
   // pause freezes the audio graph too (tails, delayed shots, loops); settings closes when play resumes
   useEffect(() => {
     audio.setPaused(phase === 'paused')

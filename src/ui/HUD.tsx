@@ -32,18 +32,18 @@ function Status({ hud }: { hud: HudState }) {
   const d = DETECTION[hud.detection]
   const level = Math.max(hud.awareness, hud.cameraDetection)
   return (
-    <div className="absolute left-1/2 top-[60px] flex -translate-x-1/2 flex-col items-center gap-1">
+    <div className="mt-1 flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
         <EyeIcon color={d.color} />
         <span className="hud-text w-4 text-center text-[12px] font-bold" style={{ color: d.color }}>{d.glyph}</span>
         <span className={`hud-text text-[11px] tracking-[0.3em] ${hud.detection === 'detected' ? 'blink' : ''}`} style={{ color: d.color }}>{d.text}</span>
       </div>
       <Segments value={level} max={1} n={10} color={d.color} height={3} width={120} />
-      <div className="hud-text text-[11px] tracking-[0.25em]">
+      <div className="hud-text text-[10px] tracking-[0.25em]">
         <span className="text-hud-dim">KILLED</span> <span className="text-danger">{hud.enemiesKilled}</span>
         <span className="text-hud-dim"> · REMAINING</span> <span className="text-hud">{hud.enemiesLeft}</span>
       </div>
-      {hud.alarm && <div className="hud-text blink mt-1 text-[11px] tracking-[0.3em] text-danger">ALARM · {hud.alarmReason.toUpperCase()}</div>}
+      {hud.alarm && <div className="hud-text blink text-[10px] tracking-[0.3em] text-danger">ALARM · {hud.alarmReason.toUpperCase()}</div>}
       {hud.restricted && <div className="hud-text text-[10px] tracking-[0.3em] text-warn">⚠ {hud.restricted}</div>}
     </div>
   )
@@ -71,7 +71,7 @@ function AlertIndicator({ hud }: { hud: HudState }) {
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.ceil(t % 60) % 60).padStart(2, '0')}`
 
-/** Mission-state banner under the compass. */
+/** Mission-state banner, in the right-hand status column (keeps the centre of the screen clear). */
 function MissionBanner({ hud }: { hud: HudState }) {
   const x = hud.extraction
   let text: string | null = null
@@ -97,11 +97,11 @@ function MissionBanner({ hud }: { hud: HudState }) {
   }
   if (!text) return null
   return (
-    <div className="hud-text absolute left-1/2 top-[132px] -translate-x-1/2 text-center">
-      <div className={`text-[15px] tracking-[0.4em] ${tone}`}>{text}</div>
+    <div className="hud-text mt-1 max-w-[16rem] text-right">
+      <div className={`text-[12px] tracking-[0.3em] ${tone}`}>{text}</div>
       {sub && <div className="hud-label mt-0.5">{sub}</div>}
       {x?.inZone && (
-        <div className="mx-auto mt-1.5 h-[3px] w-48 bg-white/15">
+        <div className="ml-auto mt-1.5 h-[3px] w-48 bg-white/15">
           <div className="h-full bg-warn" style={{ width: `${(x.progress / x.total) * 100}%` }} />
         </div>
       )}
@@ -252,6 +252,7 @@ function Vitals({ hud }: { hud: HudState }) {
         <span className="text-hud">{hud.stance === 'prone' ? '▁ PRONE' : hud.stance === 'crouch' ? '▄ CROUCH' : '█ STAND'}</span>
         {Math.abs(hud.lean) > 0.3 && <span className="text-hud">{hud.lean < 0 ? '◂ LEAN' : 'LEAN ▸'}</span>}
         <span className={hud.flashlight ? 'text-warn' : 'text-hud-dim'}>LIGHT {hud.flashlight ? 'ON' : 'OFF'}</span>
+        <span className={hud.nightVision ? 'text-accent' : 'text-hud-dim'}>NV {hud.nightVision ? 'ON' : 'OFF'} [{bindingLabel('nightVision')}]</span>
         {hud.keycard && <span className="text-accent">▣ KEYCARD</span>}
       </div>
     </div>
@@ -274,7 +275,10 @@ function Ammo({ hud }: { hud: HudState }) {
       )}
       <div className="mt-1 h-3 text-[10px] tracking-[0.3em] text-warn">{status}</div>
       <div className="hud-label mt-1.5">
-        [{bindingLabel('grenade')}] {hud.equipment.name} ×{hud.equipment.count}
+        {hud.equipment.inHand
+          ? <span className="text-accent">IN HAND · {bindingLabel('fire')} hold to throw · {bindingLabel('weapon4')} cycle</span>
+          : <>[{bindingLabel('weapon4')}] equip · [{bindingLabel('grenade')}] quick throw · [{bindingLabel('weapon5')}] knife</>}{' '}
+        · {hud.equipment.name} ×{hud.equipment.count}
         <span className="ml-2 opacity-60">F{hud.equipment.counts.frag} S{hud.equipment.counts.smoke} B{hud.equipment.counts.flash} · {bindingLabel('cycleGrenade')} cycle</span>
       </div>
     </div>
@@ -294,7 +298,7 @@ function Vehicle({ hud }: { hud: HudState }) {
 
 function TrainingPanel({ t }: { t: NonNullable<HudState['training']> }) {
   return (
-    <div className="hud-text hud-panel absolute left-1/2 top-[190px] w-[30rem] -translate-x-1/2 px-4 py-2 text-center">
+    <div className="hud-text hud-panel absolute left-5 top-[118px] w-96 px-4 py-2">
       <div className="hud-label">Training {t.index}/{t.total} · {t.title}</div>
       <div className="mt-1 text-[14px] text-hud">{t.text}</div>
     </div>
@@ -316,14 +320,15 @@ export function HUD() {
     </div>
     <div className="pointer-events-none fixed inset-0" style={{ zoom: uiScale }}>
       <Compass />
-      {detection && <Status hud={hud} />}
       {hud.training && !recon && hud.aim < 0.5 && <TrainingPanel t={hud.training} />}
-      <MissionBanner hud={hud} />
       <Objective hud={hud} />
+      {/* everything status-like stacks down the right edge so the centre of the screen stays clear */}
       <div className="absolute right-5 top-5 flex flex-col items-end gap-1.5">
         {minimap && <Minimap />}
         <div className="hud-text hud-label">{hud.timeLabel}</div>
         <AlertIndicator hud={hud} />
+        {detection && <Status hud={hud} />}
+        <MissionBanner hud={hud} />
       </div>
       <Messages />
       <Radio />

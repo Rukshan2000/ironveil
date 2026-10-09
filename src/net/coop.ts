@@ -1,14 +1,14 @@
 import Peer, { type DataConnection, type MediaConnection } from 'peerjs'
 import { Quaternion, Vector3 } from 'three'
 import { audio } from '../audio/AudioSystem'
-import { damageGuard, GUARD_DAMAGE, placeGuard } from '../enemies/guards'
+import { damageGuard, GUARD_GUNS, placeGuard } from '../enemies/guards'
 import type { AIState as GuardState } from '../ai/guardBrain'
 import type { GameSession } from '../game/GameSession'
 import type { MissionEvent } from '../missions/types'
 import type { Character } from '../physics/Physics'
 import { useGameStore } from '../state/gameStore'
 import { wrapAngle } from '../utils/math'
-import { AR_K7, LOADOUT } from '../weapons/definitions'
+import { LOADOUT } from '../weapons/definitions'
 
 /**
  * Two-player co-op over WebRTC (PeerJS; its public broker only pairs the browsers, game traffic is peer to peer).
@@ -420,8 +420,9 @@ class Coop {
         if (!g) return
         v.fromArray(m.m)
         d.fromArray(m.d)
-        s.ballistics.fire(v, d, AR_K7.ballistics, GUARD_DAMAGE, { head: 1.5, limb: 0.75 }, { kind: 'guard', id: g.data.id }, g.character.collider, true)
-        audio.gunshot(AR_K7.sound, v)
+        const gun = GUARD_GUNS[g.data.kind]
+        s.ballistics.fire(v, d, gun.def.ballistics, gun.damage, { head: 1.5, limb: 0.75 }, { kind: 'guard', id: g.data.id }, g.character.collider, true)
+        audio.gunshot(gun.def.sound, v)
         s.effects.muzzle(v, d, 0.6)
         g.muzzleTime = s.time
         g.anim.sinceShot = 0

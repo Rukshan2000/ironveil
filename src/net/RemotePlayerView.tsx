@@ -8,7 +8,7 @@ import type { GameSession } from '../game/GameSession'
 
 /** The co-op friend: the rigged GLB soldier once it has downloaded, the procedural one until then (or offline). */
 export function RemotePlayerView({ session }: { session: GameSession }) {
-  const rig = useSoldierRig(TINT.friend)
+  const rig = useSoldierRig({ tint: TINT.friend })
   const root = useRef<Group>(null)
   const anim = useMemo<AnimState>(() => ({
     speed: 0, crouch: 0, aim: 0, sinceShot: 99, reload: -1, radio: false, turnRate: 0, lookYaw: 0, sinceHit: 99,

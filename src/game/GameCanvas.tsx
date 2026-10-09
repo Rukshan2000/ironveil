@@ -6,6 +6,8 @@ import { HelicopterView } from '../extraction/HelicopterView'
 import { GuardsView } from '../enemies/GuardsView'
 import { WeaponView } from '../weapons/WeaponView'
 import { WorldView } from '../world/WorldView'
+import { ComputersView } from '../world/ComputersView'
+import { RainView } from '../world/RainView'
 import { FlashlightView } from '../player/FlashlightView'
 import { SecurityView } from '../security/SecurityView'
 import { ParkedVehicles, VehicleView } from '../vehicles/VehicleView'
@@ -39,6 +41,8 @@ export function GameCanvas({ session }: { session: GameSession }) {
         <GameLoop session={session} />
         <IntroCinematic session={session} vm={vm} />
         <WorldView session={session} />
+        <ComputersView session={session} />
+        <RainView session={session} />
         <FlashlightView session={session} />
         <GuardsView session={session} />
         <RemotePlayerView session={session} />
