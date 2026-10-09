@@ -26,6 +26,8 @@ export interface BoxDef {
   collide?: boolean
   /** Defaults to true for everything but flat decals/roads. */
   castShadow?: boolean
+  /** Collides and blocks sight/bullets like its material, but isn't drawn: a detailed prop model draws it (see PropDef). */
+  hidden?: boolean
 }
 
 export interface LampDef {
@@ -198,6 +200,8 @@ export interface LevelLayout {
   restrictedZones: ZoneDef[]
   interiors: InteriorDef[]
   vehicles: VehicleSpawn[]
+  /** Detailed parked-vehicle models drawn over their hidden collision boxes. Ground is y = 0. */
+  props: PropDef[]
   /** Named waypoint routes for AI-driven vehicles. */
   vehicleRoutes: Record<string, Vector3Tuple[]>
   audioZones: AudioZoneDef[]
@@ -217,4 +221,11 @@ export interface LevelLayout {
   extraction: { position: Vector3Tuple; radius: number }
   /** Bounds used by the minimap and nav grid: [minX, minZ, maxX, maxZ]. */
   bounds: [number, number, number, number]
+}
+
+/** A parked vehicle model (non-drivable scenery). Position is x, z; front faces local -Z. */
+export interface PropDef {
+  model: 'truck' | 'truck-open' | 'forklift'
+  position: [number, number]
+  yaw: number
 }

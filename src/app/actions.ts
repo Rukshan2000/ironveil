@@ -1,6 +1,6 @@
 import { audio } from '../audio/AudioSystem'
 import { GameSession } from '../game/GameSession'
-import { applyCheckpoint, loadCheckpoint } from '../missions/checkpoint'
+import { applyCheckpoint, keepKills, loadCheckpoint } from '../missions/checkpoint'
 import { NIGHTFALL } from '../missions/nightfall'
 import { NIGHTFALL_EVENTS } from '../missions/nightfallEvents'
 import { useGameStore } from '../state/gameStore'
@@ -53,6 +53,8 @@ export async function restartMission() {
 
 /** Resume from the last local checkpoint. Must run inside a click handler. */
 export async function continueFromCheckpoint() {
+  const old = useGameStore.getState().session
+  if (old) keepKills(old)
   const c = loadCheckpoint()
   if (!c) return
   audio.unlock()

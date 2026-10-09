@@ -27,6 +27,8 @@ export class Vehicle {
   speed = 0
   /** Set by a VehicleAI: replaces player input. */
   autopilot: { throttle: number; steer: number; brake: number } | null = null
+  /** The co-op friend is driving this one: it follows their streamed transform instead of simulating. */
+  remote: { position: Vector3; quaternion: Quaternion; speed: number } | null = null
   private engine: LoopHandle | null = null
   private noiseTimer = 0
 
@@ -68,7 +70,30 @@ export class Vehicle {
     return out.set(0, 0, -1).applyQuaternion(this.quaternion)
   }
 
+  /** Co-op: hand the vehicle to the friend's stream (or back to physics with null). */
+  setRemote(r: { position: Vector3; quaternion: Quaternion; speed: number } | null) {
+    if (!r === !this.remote) return
+    this.remote = r
+    this.body.setBodyType(r ? RAPIER.RigidBodyType.KinematicPositionBased : RAPIER.RigidBodyType.Dynamic, true)
+    if (!r) this.speed = 0
+  }
+
+  private followRemote(dt: number) {
+    const r = this.remote!
+    const k = this.position.distanceTo(r.position) > 6 ? 1 : 1 - Math.exp(-12 * dt)
+    this.position.lerp(r.position, k)
+    this.quaternion.slerp(r.quaternion, k)
+    this.body.setNextKinematicTranslation(this.position)
+    this.body.setNextKinematicRotation(this.quaternion)
+    this.speed = r.speed
+    this.rpm = damp(this.rpm, clamp(Math.abs(this.speed) / this.def.maxSpeed, 0, 1) * 0.8 + 0.15, 3, dt)
+    this.engine ??= audio.loop('engine', this.position)
+    this.engine?.set('rate', this.rpm)
+    this.engine?.move(this.position)
+  }
+
   update(dt: number, driven: boolean) {
+    if (this.remote) return this.followRemote(dt)
     const def = this.def
     let throttle = 0, brake = 0, steerIn = 0, handbrake = false
     if (this.autopilot) {
@@ -161,7 +186,7 @@ export class VehicleSystem {
 
   /** Vehicle within reach of the player's position, if any (not ones an AI is driving). */
   near(p: Vector3): Vehicle | null {
-    return this.vehicles.find((veh) => !veh.autopilot && veh.position.distanceTo(p) < 3.2 + (veh.def.model === 'truck' ? 1.5 : 0)) ?? null
+    return this.vehicles.find((veh) => !veh.autopilot && !veh.remote && veh.position.distanceTo(p) < 3.2 + (veh.def.model === 'truck' ? 1.5 : 0)) ?? null
   }
 
   /** Has an AI drive vehicle `id` along a named layout route. Returns false if it can't (missing, or player has it). */

@@ -39,6 +39,10 @@ function Status({ hud }: { hud: HudState }) {
         <span className={`hud-text text-[11px] tracking-[0.3em] ${hud.detection === 'detected' ? 'blink' : ''}`} style={{ color: d.color }}>{d.text}</span>
       </div>
       <Segments value={level} max={1} n={10} color={d.color} height={3} width={120} />
+      <div className="hud-text text-[11px] tracking-[0.25em]">
+        <span className="text-hud-dim">KILLED</span> <span className="text-danger">{hud.enemiesKilled}</span>
+        <span className="text-hud-dim"> · REMAINING</span> <span className="text-hud">{hud.enemiesLeft}</span>
+      </div>
       {hud.alarm && <div className="hud-text blink mt-1 text-[11px] tracking-[0.3em] text-danger">ALARM · {hud.alarmReason.toUpperCase()}</div>}
       {hud.restricted && <div className="hud-text text-[10px] tracking-[0.3em] text-warn">⚠ {hud.restricted}</div>}
     </div>

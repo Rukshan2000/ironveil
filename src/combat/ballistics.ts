@@ -3,7 +3,8 @@ import { Vector3 } from 'three'
 import type { Physics, RayHit } from '../physics/Physics'
 import type { BallisticsDef } from '../weapons/types'
 
-export type BulletOwner = { kind: 'player' } | { kind: 'guard'; id: string }
+/** `peer`: a replay of the co-op friend's shot — visuals only, their own game applies the damage. */
+export type BulletOwner = { kind: 'player' } | { kind: 'peer' } | { kind: 'guard'; id: string }
 
 export interface Bullet {
   active: boolean
@@ -106,7 +107,7 @@ export class Ballistics {
     let remaining = dir.length()
     if (remaining < 1e-6) return
     dir.divideScalar(remaining)
-    if (listener && b.owner.kind !== 'player' && !b.whizzed) this.checkWhizz(b, to, listener)
+    if (listener && b.owner.kind === 'guard' && !b.whizzed) this.checkWhizz(b, to, listener)
     origin.copy(b.pos)
     for (let guard = 0; guard < 4 && remaining > 0; guard++) {
       const hit = this.physics.raycast(origin, dir, remaining, b.exclude, 'bullet')

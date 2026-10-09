@@ -29,6 +29,10 @@ export interface AnimState {
   sinceDeath: number
   /** Direction of the killing shot (world), for which way the body falls. Ragdoll-ready impulse. */
   deathDir: Vector3
+  /** Weapon pitch (rad, + is up) — only the co-op friend sends it. */
+  pitch?: number
+  /** World direction of travel (rad, same convention as yaw) — only the co-op friend sends it. */
+  moveYaw?: number
   /** Body yaw (world), so rigs can convert deathDir into local space. */
   yaw: number
 }

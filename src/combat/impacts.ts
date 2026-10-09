@@ -53,6 +53,10 @@ export function createHitHandler(s: GameSession): HitHandler {
         case 'guard': {
           const g = s.guards.find((x) => x.data.id === tag.id)
           if (!g || g.data.state === 'DEAD') return 0
+          if (b.owner.kind === 'peer') {
+            s.effects.impact('flesh', hit.point, hit.normal, dir)
+            return SURFACES.flesh.penetrationCost
+          }
           const zone = hitZone(hit.point, g.data.position, g.crouched ? 0.7 : 1, g.data.yaw)
           const torso = zone === 'chest' || zone === 'stomach'
           const killed = damageGuard(s, g, damage * zoneMultiplier(zone, b.headMult, b.limbMult), dir, b.owner.kind === 'player', torso)
@@ -67,7 +71,7 @@ export function createHitHandler(s: GameSession): HitHandler {
           return SURFACES.flesh.penetrationCost
         }
         case 'player': {
-          if (b.owner.kind === 'player') return 0
+          if (b.owner.kind !== 'guard') return 0 // no friendly fire
           const p = s.player
           const zone = hitZone(hit.point, p.feet, p.prone ? 0.45 : p.crouching ? 0.65 : 1, p.yaw)
           s.damagePlayer(damage * zoneMultiplier(zone, 1.6, 0.75), dir, 'Eliminated', zone === 'chest' || zone === 'stomach')

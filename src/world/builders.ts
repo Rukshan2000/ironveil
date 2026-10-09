@@ -315,11 +315,12 @@ export function truck(x: number, z: number, yaw: number, color = 0x4c5434, cover
       parts.push(cyl([wx * 1.02, 0.55, wz], 0.55, 0.44, 'metal', { rz: Math.PI / 2, collide: false, color: 0x3a3c30 }))
     }
   }
-  return place(parts, x, z, yaw)
+  return place(parts.map((p) => ({ ...p, hidden: true })), x, z, yaw) // drawn by the 'truck' prop model
 }
 
+/** Forklift collision (drawn by the 'forklift' prop model). */
 export function forklift(x: number, z: number, yaw: number): BoxDef[] {
-  return place([
+  return place(([
     box([0, 0.75, 0.2], [1.1, 0.9, 1.8], 'paintedMetal', { color: 0xa08a2a }),
     box([0, 1.9, 0.1], [1.0, 0.08, 1.2], 'metal', { collide: false }),
     box([-0.48, 1.4, -0.5], [0.06, 1.1, 0.06], 'metal', { collide: false }),
@@ -331,7 +332,7 @@ export function forklift(x: number, z: number, yaw: number): BoxDef[] {
     cyl([0.55, 0.3, -0.5], 0.6, 0.25, 'rubber', { rz: Math.PI / 2, collide: false }),
     cyl([-0.5, 0.25, 0.8], 0.5, 0.22, 'rubber', { rz: Math.PI / 2, collide: false }),
     cyl([0.5, 0.25, 0.8], 0.5, 0.22, 'rubber', { rz: Math.PI / 2, collide: false }),
-  ], x, z, yaw)
+  ] as BoxDef[]).map((p) => ({ ...p, hidden: true })), x, z, yaw)
 }
 
 export function pallet(x: number, z: number, yaw = 0, stack = 1): BoxDef[] {

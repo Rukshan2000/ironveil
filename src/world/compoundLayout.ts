@@ -407,6 +407,11 @@ export const compoundLayout: LevelLayout = {
     { id: 'power', label: 'POWER STATION — RESTRICTED', rect: [58.3, -60, 66, -32] },
   ],
   interiors,
+  props: [
+    { model: 'truck', position: [-41, 30], yaw: Math.PI },
+    { model: 'truck-open', position: [-32, 30], yaw: Math.PI },
+    { model: 'forklift', position: [36, -8], yaw: 0.6 },
+  ],
   vehicles: [
     { def: 'jeep', position: [-34, 1.2, 7.5], yaw: -Math.PI / 2 },
     { id: 'supply-truck', def: 'truck', position: [-2, 1.4, 172], yaw: 0 },

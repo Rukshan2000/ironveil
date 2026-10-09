@@ -1,8 +1,9 @@
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { AdditiveBlending, Color, Group, Mesh, MeshBasicMaterial, PointLight, Vector3 } from 'three'
 import type { AIState } from '../ai/guardBrain'
-import { SoldierRig } from '../characters/SoldierRig'
+import { TINT } from '../characters/GltfSoldier'
+import { useSoldierRig } from '../characters/useSoldierRig'
 import type { GameSession } from '../game/GameSession'
 import { useGameStore } from '../state/gameStore'
 import type { GuardEntity } from './guards'
@@ -16,12 +17,12 @@ const LOD_FAR = 45
 const ANIM_CULL = 110
 
 function GuardView({ guard, session, debug }: { guard: GuardEntity; session: GameSession; debug: boolean }) {
-  const rig = useMemo(() => new SoldierRig(), [])
+  const rig = useSoldierRig(TINT.enemy)
+  const last = useRef({ rig, x: guard.data.position.x, z: guard.data.position.z })
   const root = useRef<Group>(null)
   const flash = useRef<Mesh>(null)
   const cone = useRef<Mesh>(null)
   const lod = useRef<0 | 1>(0)
-  useEffect(() => () => rig.dispose(), [rig])
 
   useFrame(({ camera }, delta) => {
     const d = guard.data
@@ -32,12 +33,17 @@ function GuardView({ guard, session, debug }: { guard: GuardEntity; session: Gam
     g.rotation.y = d.yaw
     const dist = camera.position.distanceTo(d.position)
     const level = dist > LOD_FAR ? 1 : 0
-    if (level !== lod.current) {
+    const fresh = last.current.rig !== rig // rig just swapped to the downloaded model: pose it once, even if frozen
+    if (level !== lod.current || fresh) {
       lod.current = level
       rig.setDetail(level)
     }
+    // direction of travel, for rigs that strafe / back-pedal
+    const mx = d.position.x - last.current.x, mz = d.position.z - last.current.z
+    if (mx * mx + mz * mz > 1e-5) guard.anim.moveYaw = Math.atan2(-mx, -mz)
+    last.current = { rig, x: d.position.x, z: d.position.z }
     // far guards animate only when on screen-ish range; corpses settle and freeze
-    if (dist < ANIM_CULL && !(guard.anim.dead && guard.anim.sinceDeath > 2)) rig.update(Math.min(delta, 0.05), guard.anim)
+    if (fresh || (dist < ANIM_CULL && !(guard.anim.dead && guard.anim.sinceDeath > 2))) rig.update(Math.min(delta, 0.05), guard.anim)
 
     const f = flash.current!
     f.visible = session.time - guard.muzzleTime < 0.05

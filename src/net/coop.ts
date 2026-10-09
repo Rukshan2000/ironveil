@@ -1,5 +1,5 @@
 import Peer, { type DataConnection, type MediaConnection } from 'peerjs'
-import { Vector3 } from 'three'
+import { Quaternion, Vector3 } from 'three'
 import { audio } from '../audio/AudioSystem'
 import { damageGuard, GUARD_DAMAGE, placeGuard } from '../enemies/guards'
 import type { AIState as GuardState } from '../ai/guardBrain'
@@ -17,7 +17,7 @@ import { AR_K7, LOADOUT } from '../weapons/definitions'
  * health, death and cheats stay local to whoever owns that player.
  */
 type Msg =
-  | { t: 'state'; p: number[] } // feet xyz, yaw, pitch, stance 0/1/2, speed, alive, aim
+  | { t: 'state'; p: number[] } // feet xyz, yaw, pitch, stance 0/1/2, speed, alive, aim, vehicle index (-1 on foot), then if driving: xyz, quat xyzw, speed
   | { t: 'pshot'; w: number; m: number[]; d: number[] }
   | { t: 'noise'; n: [string, number, number, number, number][] }
   | { t: 'guards'; g: (number | string)[][]; alert: number }
@@ -60,6 +60,9 @@ export interface PeerState {
   sinceShot: number
   sinceDeath: number
   seen: boolean
+  /** Vehicle they're driving (-1 = on foot) and its streamed transform. */
+  vehicle: number
+  drive: { position: Vector3; quaternion: Quaternion; speed: number }
 }
 
 class Coop {
@@ -77,6 +80,7 @@ class Coop {
   private guardTargets: (Vector3 | null)[] = []
   readonly other: PeerState = {
     feet: new Vector3(), shown: new Vector3(), yaw: 0, pitch: 0, stance: 0, speed: 0, alive: true, aim: 0, sinceShot: 99, sinceDeath: 0, seen: false,
+    vehicle: -1, drive: { position: new Vector3(), quaternion: new Quaternion(), speed: 0 },
   }
 
   get connected() {
@@ -149,6 +153,8 @@ class Coop {
     c.on('close', () => {
       if (this.conn !== c) return // we left on purpose (or were turned away)
       this.hangup(false)
+      this.s?.vehicles.vehicles[this.other.vehicle]?.setRemote(null)
+      this.other.vehicle = -1
       this.conn = null
       this.other.seen = false
       this.proxy?.collider.setEnabled(false)
@@ -200,7 +206,9 @@ class Coop {
     if ((this.sendTimer -= dt) <= 0) {
       this.sendTimer = STATE_RATE
       const f = p.feet
-      this.send({ t: 'state', p: [r2(f.x), r2(f.y), r2(f.z), r2(p.yaw), r2(p.pitch), p.prone ? 2 : p.crouching ? 1 : 0, r2(p.speed), p.alive ? 1 : 0, r2(s.weapon.aim)] })
+      const veh = s.vehicles.driving
+      const drive = veh ? [s.vehicles.vehicles.indexOf(veh), r2(veh.position.x), r2(veh.position.y), r2(veh.position.z), ...veh.quaternion.toArray().map((q) => Math.round(q * 1e4) / 1e4), r2(veh.speed)] : [-1]
+      this.send({ t: 'state', p: [r2(f.x), r2(f.y), r2(f.z), r2(p.yaw), r2(p.pitch), p.prone ? 2 : p.crouching ? 1 : 0, r2(p.speed), p.alive ? 1 : 0, r2(s.weapon.aim), ...drive] })
     }
     if (s.stats.shots !== this.shots) {
       this.shots = s.stats.shots
@@ -342,8 +350,19 @@ class Coop {
     const o = this.other
     switch (m.t) {
       case 'state': {
-        const [x, y, z, yaw, pitch, stance, speed, alive, aim] = m.p
+        const [x, y, z, yaw, pitch, stance, speed, alive, aim, vehicle] = m.p
         o.feet.set(x, y, z)
+        // driving: hand that vehicle to their stream; release the previous one when they get out or switch
+        const prev = s.vehicles.vehicles[o.vehicle]
+        const veh = s.vehicles.vehicles[vehicle]
+        if (prev && prev !== veh) prev.setRemote(null)
+        if (veh && veh !== s.vehicles.driving) {
+          o.drive.position.fromArray(m.p, 10)
+          o.drive.quaternion.fromArray(m.p, 13)
+          o.drive.speed = m.p[17]
+          veh.setRemote(o.drive)
+        }
+        o.vehicle = veh ? vehicle : -1
         if (!o.seen) o.shown.copy(o.feet)
         o.seen = true
         Object.assign(o, { yaw, pitch, stance, speed, aim })
@@ -354,8 +373,11 @@ class Coop {
       case 'pshot': {
         v.fromArray(m.m)
         d.fromArray(m.d)
-        audio.gunshot(LOADOUT[m.w].sound, v)
+        const def = LOADOUT[m.w]
+        audio.gunshot(def.sound, v)
         s.effects.muzzle(v, d, 1)
+        // replay the bullet so its tracer and impacts show where it really went (no damage: theirs to apply)
+        s.ballistics.fire(v, d, def.ballistics, 0, { head: 1, limb: 1 }, { kind: 'peer' }, this.proxy?.collider, true)
         o.sinceShot = 0
         break
       }

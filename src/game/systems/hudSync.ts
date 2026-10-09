@@ -51,6 +51,8 @@ export function publishHud(s: GameSession, perf: { fps: number; frameMs: number;
       objectives: objectiveViews(s),
       alertLevel: s.alert.level,
       commsDown: s.alert.commsDown,
+      enemiesKilled: s.guards.filter((g) => g.data.state === 'DEAD').length,
+      enemiesLeft: s.guards.filter((g) => g.active && g.data.state !== 'DEAD').length,
       extraction: s.extraction.available ? { inZone: s.extraction.inZone, progress: s.extraction.progress, total: s.extraction.total } : null,
       recon: s.recon.active
         ? { zoom: s.recon.zoom, range: s.recon.range, target: s.recon.target, tagProgress: s.recon.tagProgress, tagged: s.recon.tagged.size }

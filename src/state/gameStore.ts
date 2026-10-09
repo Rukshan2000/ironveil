@@ -60,6 +60,9 @@ export interface HudState {
   objectiveDistance: number | null
   alertLevel: number
   commsDown: boolean
+  /** Guards down / guards still standing on the map (reinforcements count once they arrive). */
+  enemiesKilled: number
+  enemiesLeft: number
   extraction: { inZone: boolean; progress: number; total: number } | null
   recon: { zoom: number; range: number | null; target: { label: string; detail: string; distance: number } | null; tagProgress: number; tagged: number } | null
   prompt: string | null

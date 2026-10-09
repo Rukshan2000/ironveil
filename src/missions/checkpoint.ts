@@ -24,6 +24,8 @@ export interface CheckpointData {
   pickupsTaken: string[]
   weapons: { ammo: number; reserve: number }[]
   dead: string[]
+  /** Where each dead guard lies: x, y, z, yaw, fall direction x/z. */
+  bodies?: Record<string, number[]>
   tagged: string[]
   discovered: string[]
   cameras: string[]
@@ -53,7 +55,8 @@ export function saveCheckpoint(s: GameSession, label: string): boolean {
     inventory: [...s.inventory],
     pickupsTaken: s.pickups.filter((x) => x.taken).map((x) => x.id),
     weapons: s.weapons.map((w) => ({ ammo: w.ammo, reserve: w.reserve })),
-    dead: s.guards.filter((g) => g.data.state === 'DEAD').map((g) => g.data.id),
+    dead: deadIds(s),
+    bodies: bodies(s),
     tagged: [...s.recon.tagged],
     discovered: [...s.recon.discovered],
     cameras: s.security.cameras.filter((c) => c.dead).map((c) => c.def.id),
@@ -68,6 +71,29 @@ export function saveCheckpoint(s: GameSession, label: string): boolean {
     return true
   } catch {
     return false
+  }
+}
+
+const deadIds = (s: GameSession) => s.guards.filter((g) => g.data.state === 'DEAD').map((g) => g.data.id)
+const bodies = (s: GameSession) => Object.fromEntries(s.guards.filter((g) => g.data.state === 'DEAD').map((g) => {
+  const p = g.data.position
+  return [g.data.id, [p.x, p.y, p.z, g.data.yaw, g.anim.deathDir.x, g.anim.deathDir.z]]
+}))
+
+/**
+ * Before respawning: guards killed since the last checkpoint stay dead (and the kill count with them), even though
+ * the player's own position/ammo roll back to the save.
+ */
+export function keepKills(s: GameSession) {
+  const c = loadCheckpoint()
+  if (!c || c.missionId !== s.def.id) return
+  c.dead = [...new Set([...c.dead, ...deadIds(s)])]
+  c.bodies = { ...c.bodies, ...bodies(s) }
+  c.stats.kills = Math.max(c.stats.kills, s.stats.kills)
+  try {
+    localStorage.setItem(KEY, JSON.stringify(c))
+  } catch {
+    // storage unavailable: the save stays as it was
   }
 }
 
@@ -90,8 +116,8 @@ export function clearCheckpoint() {
 }
 
 /**
- * Applies a checkpoint to a freshly created session. Dead guards are removed rather than re-laid (bodies are not
- * persisted); the alert level restarts calm — the facility has had time to settle, but stays sharper.
+ * Applies a checkpoint to a freshly created session. Dead guards are laid back where they fell (older saves without
+ * body positions just remove them); the alert level restarts calm — the facility has had time to settle, but stays sharper.
  */
 export function applyCheckpoint(s: GameSession, c: CheckpointData) {
   s.time = c.time
@@ -116,9 +142,17 @@ export function applyCheckpoint(s: GameSession, c: CheckpointData) {
   })
   for (const g of s.guards) {
     if (c.dead.includes(g.data.id)) {
+      const b = c.bodies?.[g.data.id]
       g.data.state = 'DEAD'
-      g.active = false
+      g.active = !!b
       g.character.collider.setEnabled(false)
+      s.bodiesFound.add(g.data.id) // old news: nobody raises the alarm over them again
+      if (!b) continue
+      g.data.position.set(b[0], b[1], b[2])
+      g.data.yaw = g.anim.yaw = b[3]
+      g.anim.deathDir.set(b[4], 0, b[5])
+      g.anim.dead = true
+      g.anim.sinceDeath = 1 // settles into the fallen pose within a second, then freezes
     } else if (g.active) g.data.alertness = Math.max(g.data.alertness, 0.4)
   }
   for (const id of c.tagged) s.recon.tagged.add(id)

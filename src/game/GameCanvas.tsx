@@ -8,7 +8,7 @@ import { WeaponView } from '../weapons/WeaponView'
 import { WorldView } from '../world/WorldView'
 import { FlashlightView } from '../player/FlashlightView'
 import { SecurityView } from '../security/SecurityView'
-import { VehicleView } from '../vehicles/VehicleView'
+import { ParkedVehicles, VehicleView } from '../vehicles/VehicleView'
 import { useGameStore } from '../state/gameStore'
 import { useSettings } from '../state/settings'
 import { GrenadeView } from '../weapons/GrenadeView'
@@ -44,6 +44,7 @@ export function GameCanvas({ session }: { session: GameSession }) {
         <RemotePlayerView session={session} />
         <SecurityView session={session} />
         <VehicleView session={session} />
+        <ParkedVehicles session={session} />
         <HelicopterView session={session} />
         <EffectsView session={session} />
         <GrenadeView session={session} />

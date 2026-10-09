@@ -86,7 +86,7 @@ export function buildStaticChunks(boxes: BoxDef[], cables: CableDef[]): StaticCh
   }
 
   for (const b of boxes) {
-    if (b.mat === 'invisible') continue
+    if (b.mat === 'invisible' || b.hidden) continue
     const spec = MATERIALS[b.mat]
     const g = b.shape === 'cyl' ? cylGeometry(b, spec.scale) : boxGeometry(b, spec.scale)
     g.applyMatrix4(boxMatrix(b))

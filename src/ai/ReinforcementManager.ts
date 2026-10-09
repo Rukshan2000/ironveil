@@ -84,7 +84,7 @@ export class ReinforcementManager {
 
     if (source.convoy) {
       const unload = (where: Vector3) => {
-        q.members.forEach((g, i) => {
+        q.members.filter((g) => g.data.state !== 'DEAD').forEach((g, i) => {
           this.activate(g, where, i)
           go(g)
         })
@@ -96,7 +96,7 @@ export class ReinforcementManager {
       }
     }
     const at0 = new Vector3(...source.position)
-    q.members.forEach((g, i) => {
+    q.members.filter((g) => g.data.state !== 'DEAD').forEach((g, i) => {
       this.activate(g, at0, i)
       go(g)
     })
