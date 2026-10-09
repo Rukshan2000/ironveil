@@ -3,6 +3,7 @@ import { continueFromCheckpoint, playIntro, openBriefing, quitToMenu, requestLoc
 import { loadCheckpoint } from '../missions/checkpoint'
 import { NIGHTFALL } from '../missions/nightfall'
 import { ALERT_LABELS, type AlertLevel } from '../security/AlertSystem'
+import { coop } from '../net/coop'
 import { useGameStore, type MissionResults } from '../state/gameStore'
 import { bindingLabel as k, useSettings } from '../state/settings'
 import { SettingsPanel } from './SettingsPanel'
@@ -36,6 +37,43 @@ function Button({ onClick, children, primary }: { onClick: () => void; children:
 
 function SettingsOverlay() {
   return <Overlay><SettingsPanel onClose={() => useGameStore.setState({ settingsOpen: false })} /></Overlay>
+}
+
+/** Host a room (share the code) or join a friend's; then both start the mission as usual. */
+function CoopPanel() {
+  const status = useGameStore((s) => s.coopStatus)
+  const code = useGameStore((s) => s.coopCode)
+  const error = useGameStore((s) => s.coopError)
+  const [input, setInput] = useState('')
+  return (
+    <div className="mt-6 border-t border-white/10 pt-4">
+      <div className="hud-label">Co-op — play with a friend</div>
+      {status === 'off' && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button onClick={() => coop.host().catch(() => {})}>HOST ROOM</Button>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value.toUpperCase())}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && input) coop.join(input) }}
+            placeholder="ROOM CODE"
+            maxLength={6}
+            className="w-36 border border-hud/30 bg-transparent px-3 py-2 text-sm tracking-[0.3em] text-hud outline-none placeholder:text-hud-dim focus:border-hud"
+          />
+          <Button onClick={() => input && coop.join(input)}>JOIN</Button>
+          {error && <span className="text-[13px] text-warn">{error}</span>}
+        </div>
+      )}
+      {status !== 'off' && (
+        <div className="mt-3 flex flex-wrap items-center gap-4 text-[14px]">
+          {status === 'hosting' && <span className="text-hud/80">Room code <b className="select-all text-xl tracking-[0.3em] text-warn">{code}</b> — waiting for your friend…</span>}
+          {status === 'joining' && <span className="text-hud/80">Joining…</span>}
+          {status === 'connected' && <span className="text-accent">Friend connected — start the mission (both players).</span>}
+          <Button onClick={() => coop.leave()}>LEAVE</Button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function MainMenu() {
@@ -77,6 +115,7 @@ export function MainMenu() {
           )}
           <Button onClick={() => useGameStore.setState({ settingsOpen: true })}>SETTINGS</Button>
         </div>
+        <CoopPanel />
       </div>
     </Overlay>
   )

@@ -15,6 +15,7 @@ import { createGuardEntity, updateGuards, type GuardEntity } from '../enemies/gu
 import { ExtractionSystem } from '../extraction/ExtractionSystem'
 import { saveCheckpoint } from '../missions/checkpoint'
 import { MissionSystem } from '../missions/MissionSystem'
+import { coop } from '../net/coop'
 import { ObjectiveManager } from '../missions/ObjectiveManager'
 import type { MissionDef } from '../missions/types'
 import { initPhysics, Physics } from '../physics/Physics'
@@ -95,6 +96,8 @@ export class GameSession {
   readonly audioZones: AudioZones
   readonly bodiesFound = new Set<string>()
   aiWorld: AIWorld | null = null
+  /** Co-op link (idle when playing solo). */
+  readonly coop = coop
   pathBudget = 0
   time = 0
   status: 'playing' | 'dead' | 'complete' = 'playing'
@@ -186,6 +189,7 @@ export class GameSession {
     this.radio.onLine = (line) => useGameStore.getState().pushRadio(line)
     audio.startAmbience(this.environment.preset.ambience, layout.ambientSources)
     this.audioZones = new AudioZones(layout.audioZones)
+    coop.attach(this)
     if (import.meta.env.DEV) Object.assign(window, { __session: this })
   }
 
@@ -263,10 +267,13 @@ export class GameSession {
     this.recon.update(dt)
     updateWeapons(this, dt)
     this.ballistics.update(dt, p.active ? p.eye(head) : null)
-    updateGuards(this, dt)
-    this.squads.update(dt)
-    this.alert.update(dt)
-    this.reinforcements.update(dt)
+    // the co-op host runs the guards; a joined friend gets them over the network
+    if (!coop.isClient) {
+      updateGuards(this, dt)
+      this.squads.update(dt)
+      this.alert.update(dt)
+      this.reinforcements.update(dt)
+    }
     this.security.update(dt)
     this.vehicles.update(dt)
     updateInteraction(this, dt)
@@ -277,6 +284,7 @@ export class GameSession {
     this.audioZones.update(dt, p.feet)
     this.mission.update(dt, { playerAlive: p.alive, alertLevel: this.alert.level, extractionAvailable: this.extraction.available })
     this.effects.update(dt, (x, y, z) => this.floorAt(x, z, y), (pos, k) => audio.shellTink(pos, k), p.feet, this.environment.playerLight > 0.6)
+    coop.update(dt)
     this.physics.step(dt)
 
     if (this.mission.state === 'FAILED') this.status = 'dead'

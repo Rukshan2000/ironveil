@@ -6,6 +6,8 @@ import type { BoxDef, Surface } from '../world/types'
 
 export type ColliderTag =
   | { kind: 'player' }
+  /** The co-op friend's body (see net/coop). */
+  | { kind: 'peer' }
   | { kind: 'guard'; id: string }
   | { kind: 'terrain' }
   /** `vision`/`bullets`: whether the collider blocks sight lines / bullets. */

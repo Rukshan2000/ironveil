@@ -14,6 +14,7 @@ import { useSettings } from '../state/settings'
 import { GrenadeView } from '../weapons/GrenadeView'
 import { GameLoop } from './GameLoop'
 import { IntroCinematic } from './IntroCinematic'
+import { RemotePlayerView } from '../net/RemotePlayerView'
 import { input } from './input'
 import { RenderPipeline } from './RenderPipeline'
 import type { GameSession } from './GameSession'
@@ -40,6 +41,7 @@ export function GameCanvas({ session }: { session: GameSession }) {
         <WorldView session={session} />
         <FlashlightView session={session} />
         <GuardsView session={session} />
+        <RemotePlayerView session={session} />
         <SecurityView session={session} />
         <VehicleView session={session} />
         <HelicopterView session={session} />

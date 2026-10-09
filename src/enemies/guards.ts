@@ -15,7 +15,7 @@ const HALF_CROUCH = 0.25
 const RADIUS = 0.35
 const EYE = { stand: 1.62, crouch: 1.1 }
 const GRAVITY = 20
-const GUARD_DAMAGE = 8
+export const GUARD_DAMAGE = 8
 const RADIO_RANGE = 45
 const SHOUT_RANGE = 14
 /** Radio range once the uplink is down. */
@@ -60,6 +60,8 @@ export interface GuardEntity {
   /** Running from a grenade: where to and for how long. */
   evade: { to: Vector3; time: number } | null
   anim: AnimState
+  /** Which player this guard is engaging: us, or the co-op friend (host only). */
+  target: 'local' | 'peer'
   /** Last perception results, for debug drawing and the HUD. */
   debug: { exposure: number; los: boolean }
 }
@@ -77,15 +79,20 @@ export function createGuardEntity(physics: Physics, spawn: GuardSpawn, active = 
   return {
     data, character, active, carries: spawn.carries, squad: spawn.squad, leader: spawn.leader, thinkAcc: Math.random() * 0.1, lastOut: null, heardBuf: null, vy: 0, stuckTime: 0, muzzleTime: -999, crouched: false,
     path: null, pathGoal: new Vector3(), pathTimer: 0, damaged: false, underFire: false, trackTime: 0, voiceCooldown: 0,
-    bodyTimer: Math.random(), intelTime: 0, stun: 0, armor: spawn.leader ? 40 : 0, evade: null, debug: { exposure: 0, los: false },
+    bodyTimer: Math.random(), intelTime: 0, stun: 0, armor: spawn.leader ? 40 : 0, evade: null, target: 'local', debug: { exposure: 0, los: false },
     anim: { speed: 0, crouch: 0, aim: 0, sinceShot: 99, reload: -1, radio: false, turnRate: 0, lookYaw: 0, sinceHit: 99, dead: false, sinceDeath: 0, deathDir: new Vector3(0, 0, 1), yaw },
   }
 }
 
 /** Applies damage. Returns true if this killed the guard. */
-export function damageGuard(s: GameSession, g: GuardEntity, amount: number, dir: Vector3, byPlayer: boolean, torso = false): boolean {
+export function damageGuard(s: GameSession, g: GuardEntity, amount: number, dir: Vector3, byPlayer: boolean, torso = false, from = s.player.feet): boolean {
   const d = g.data
   if (d.state === 'DEAD') return false
+  // co-op friend: the host owns guard health
+  if (s.coop.isClient) {
+    if (byPlayer) s.coop.guardDamage(s.guards.indexOf(g), amount, dir, torso)
+    return false
+  }
   if (torso && g.armor > 0) {
     const soak = Math.min(g.armor, amount * 0.35)
     g.armor -= soak
@@ -105,7 +112,7 @@ export function damageGuard(s: GameSession, g: GuardEntity, amount: number, dir:
     s.objectives.handle({ type: 'killed', entityId: d.id })
     if (g.carries) s.dropPickup(g.carries, d.position)
     say(g, 'death', true)
-    if (byPlayer) s.alert.report(s.player.feet)
+    if (byPlayer) s.alert.report(from)
     // a scream carries: nearby guards come to look
     s.noises.push({ position: d.position.clone(), kind: 'voice', radius: 16 })
     return true
@@ -113,7 +120,7 @@ export function damageGuard(s: GameSession, g: GuardEntity, amount: number, dir:
   g.damaged = true
   say(g, 'hurt', true)
   if (byPlayer) {
-    d.lastKnown = (d.lastKnown ?? new Vector3()).copy(s.player.feet)
+    d.lastKnown = (d.lastKnown ?? new Vector3()).copy(from)
     d.memoryAge = 0
   }
   return false
@@ -169,7 +176,7 @@ export function updateGuards(s: GameSession, dt: number) {
     // far guards think less often; movement keeps using the last decision in between
     g.thinkAcc += dt
     let out: BrainOutput
-    if (!g.lastOut || g.thinkAcc >= THINK_INTERVAL(g.data.position.distanceTo(s.player.feet))) {
+    if (!g.lastOut || g.thinkAcc >= THINK_INTERVAL(Math.min(g.data.position.distanceTo(s.player.feet), s.coop.connected ? g.data.position.distanceTo(s.coop.other.feet) : Infinity))) {
       const step = g.thinkAcc
       g.thinkAcc = 0
       out = g.lastOut = updateGuardBrain(g.data, perceive(s, g, step), world, step)
@@ -188,7 +195,7 @@ export function updateGuards(s: GameSession, dt: number) {
     if (out.callout) callout(s, g, out.callout)
     if (before !== now && now === 'SEARCH') say(g, 'search')
     move(s, g, out, dt)
-    if (out.fire && s.player.alive) shoot(s, g)
+    if (out.fire && (g.target === 'peer' ? s.coop.other.alive : s.player.alive)) shoot(s, g)
     animate(g, out, dt)
   }
 }
@@ -267,6 +274,26 @@ function perceive(s: GameSession, g: GuardEntity, dt: number): Perception {
   if (exposure > 0 && s.security.zoneAt(p.feet)) exposure = Math.min(1, exposure * 1.35)
   // the searchlight this guard operates has the player in its beam
   exposure = Math.max(exposure, s.security.searchlightExposure(d.id))
+  // co-op: whichever player this guard sees better is the one he deals with
+  let position = p.active ? p.feet : s.vehicles.driving?.position ?? p.feet
+  g.target = 'local'
+  const o = s.coop.other
+  if (s.coop.connected && o.seen && o.alive && g.stun <= 0) {
+    target.copy(o.shown).setY(o.shown.y + (o.stance === 2 ? 0.3 : o.stance === 1 ? 0.8 : 1.3))
+    const dist = eye.distanceTo(target)
+    const ang = Math.abs(wrapAngle(yawTo(target.x - eye.x, target.z - eye.z) - d.yaw))
+    const seen = dist < d.visionRange * 2.2 && (ang < d.fov / 2 + 0.2 || dist < 6) && canSee(s, g, target)
+    const ex = computeExposure({
+      distance: dist, range: d.visionRange, angle: ang, fov: d.fov, hasLineOfSight: seen, speed: o.speed,
+      crouching: o.stance === 1, prone: o.stance === 2, light: s.environment.playerLight, flashlightAtGuard: false, alertness: d.alertness,
+    })
+    if (seen && (ex > exposure || !los)) {
+      exposure = ex
+      los = true
+      position = o.shown
+      g.target = 'peer'
+    }
+  }
   g.debug.exposure = exposure
   g.debug.los = los
   g.trackTime = los ? g.trackTime + dt : Math.max(0, g.trackTime - dt * 2)
@@ -304,7 +331,7 @@ function perceive(s: GameSession, g: GuardEntity, dt: number): Perception {
   const damaged = g.damaged
   g.damaged = false
   g.underFire = false
-  return { exposure, playerVisible: los, playerPosition: p.active ? p.feet : s.vehicles.driving?.position ?? p.feet, heard, intel, damaged, underFire, body }
+  return { exposure, playerVisible: los, playerPosition: position, heard, intel, damaged, underFire, body }
 }
 
 /** Hearing runs every frame (noises only last one) and keeps the loudest until the brain next thinks. */
@@ -328,7 +355,7 @@ function canSee(s: GameSession, g: GuardEntity, point: Vector3) {
   const dist = dir.length()
   dir.divideScalar(dist)
   const hit = s.physics.raycast(eye, dir, dist + 0.5, g.character.collider, 'vision')
-  return hit?.tag?.kind === 'player' || hit?.tag?.kind === 'vehicle'
+  return hit?.tag?.kind === 'player' || hit?.tag?.kind === 'vehicle' || hit?.tag?.kind === 'peer'
 }
 
 function move(s: GameSession, g: GuardEntity, out: BrainOutput, dt: number) {
@@ -394,6 +421,14 @@ function move(s: GameSession, g: GuardEntity, out: BrainOutput, dt: number) {
   g.anim.lookYaw = damp(g.anim.lookYaw, lookYaw === null ? 0 : Math.max(-0.7, Math.min(0.7, wrapAngle(lookYaw - d.yaw))), 6, dt)
 }
 
+/** Co-op friend: puts a host-driven guard's collider where the host says he is. */
+export function placeGuard(g: GuardEntity) {
+  const half = g.crouched ? HALF_CROUCH : HALF_STAND
+  if (g.character.collider.halfHeight() !== half) g.character.collider.setHalfHeight(half)
+  const p = g.data.position
+  g.character.body.setNextKinematicTranslation({ x: p.x, y: p.y + half + RADIUS, z: p.z })
+}
+
 function setCrouch(physics: Physics, g: GuardEntity, crouch: boolean) {
   if (crouch === g.crouched) return
   g.crouched = crouch
@@ -409,15 +444,18 @@ function shoot(s: GameSession, g: GuardEntity) {
   const p = s.player
   const fy = g.crouched ? 1.05 : 1.45
   muzzle.set(d.position.x - Math.sin(d.yaw) * 0.7 + Math.cos(d.yaw) * 0.12, d.position.y + fy, d.position.z - Math.cos(d.yaw) * 0.7 - Math.sin(d.yaw) * 0.12)
-  if (p.active) p.chest(target)
+  const o = s.coop.other
+  if (g.target === 'peer') target.copy(o.shown).setY(o.shown.y + (o.stance === 2 ? 0.3 : o.stance === 1 ? 0.8 : 1.3))
+  else if (p.active) p.chest(target)
   else target.copy(s.vehicles.driving!.position).setY(s.vehicles.driving!.position.y + 1)
   const distance = muzzle.distanceTo(target)
   // accuracy: worse at range, against movers, in the dark, right after spotting, and while being hit
-  const err = 0.22 + distance * 0.018 + p.speed * 0.1 + Math.max(0, 1.6 - g.trackTime * 0.55)
+  const err = 0.22 + distance * 0.018 + (g.target === 'peer' ? o.speed : p.speed) * 0.1 + Math.max(0, 1.6 - g.trackTime * 0.55)
     + (g.anim.sinceHit < 1 ? 0.5 : 0) + (s.environment.playerLight < 0.3 ? 0.3 : 0) - (p.crouching ? 0.05 : 0)
   dir.randomDirection().multiplyScalar(Math.random() * err)
   target.add(dir)
   dir.subVectors(target, muzzle).normalize()
+  s.coop.guardShot(s.guards.indexOf(g), muzzle, dir)
   s.ballistics.fire(muzzle, dir, AR_K7.ballistics, GUARD_DAMAGE, { head: 1.5, limb: 0.75 }, { kind: 'guard', id: d.id }, g.character.collider, true)
   g.muzzleTime = s.time
   g.anim.sinceShot = 0

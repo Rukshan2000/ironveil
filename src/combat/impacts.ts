@@ -73,6 +73,10 @@ export function createHitHandler(s: GameSession): HitHandler {
           s.damagePlayer(damage * zoneMultiplier(zone, 1.6, 0.75), dir, 'Eliminated', zone === 'chest' || zone === 'stomach')
           return Infinity
         }
+        case 'peer':
+          // the friend's own game decides what this does to them
+          s.effects.impact('flesh', hit.point, hit.normal, dir)
+          return b.owner.kind === 'player' ? 0 : Infinity
         case 'camera':
           s.security.damageCamera(tag.id)
           s.effects.impact('metal', hit.point, hit.normal, dir)
