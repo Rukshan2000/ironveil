@@ -3,6 +3,7 @@ import {
   PointLight, Quaternion, Scene, SpotLight, SRGBColorSpace, Vector3, type Bone, type Material, type Object3D, type PerspectiveCamera,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { pointBone } from '../characters/GltfSoldier'
 import { NIGHTFALL } from '../missions/nightfall'
 import { useSettings } from '../state/settings'
@@ -360,7 +361,7 @@ class BriefingRoom {
     if (this.eva) return
     this.eva = new Group()
     this.scene.add(this.eva)
-    const loader = new GLTFLoader()
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder) // eva.glb is meshopt-compressed (models-src/ has the original)
     loader.loadAsync(LOCAL_EVA_URL)
       .then((gltf) => this.place(gltf.scene, true))
       .catch(() => loader.loadAsync(EVA_URL).then((gltf) => this.place(gltf.scene, false)))
