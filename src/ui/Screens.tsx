@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { continueFromCheckpoint, goHome, playIntro, openBriefing, quitToMenu, requestLock, restartMission } from '../app/actions'
+import { continueFromCheckpoint, goHome, playIntro, openBriefing, quitToMenu, requestLock, restartMission, selectMission, startMission } from '../app/actions'
 import { loadCheckpoint } from '../missions/checkpoint'
-import { NIGHTFALL } from '../missions/nightfall'
+import { mission, MISSIONS, nextMission, unlocked } from '../missions/registry'
 import { ALERT_LABELS, type AlertLevel } from '../security/AlertSystem'
 import { coop } from '../net/coop'
 import { useGameStore, type MissionResults } from '../state/gameStore'
@@ -81,14 +81,30 @@ export function MainMenu() {
   const settingsOpen = useGameStore((s) => s.settingsOpen)
   useSettings((s) => s.bindings) // re-render the controls list on rebinding
   const [checkpoint] = useState(loadCheckpoint)
+  const m = mission(useGameStore((s) => s.missionId))
   if (settingsOpen) return <SettingsOverlay />
   return (
     <Overlay>
       <div className="panel w-[760px] max-w-[94vw] p-8">
         <div className="hud-label">Tactical infiltration</div>
         <h1 className="mt-1 text-5xl font-semibold tracking-[0.25em] text-hud">IRONVEIL</h1>
-        <div className="mt-6 text-xs tracking-[0.3em] text-warn">MISSION 01 // OPERATION {NIGHTFALL.name}</div>
-        <p className="mt-2 text-[15px] leading-relaxed text-hud/85">{NIGHTFALL.briefing}</p>
+        <div className="mt-6 flex flex-wrap gap-2">
+          {MISSIONS.map((x) => {
+            const open = unlocked(x.def.id)
+            return (
+              <button
+                key={x.def.id}
+                disabled={!open}
+                onClick={(e) => { e.stopPropagation(); selectMission(x.def.id) }}
+                className={`border px-3 py-1 text-[11px] tracking-[0.2em] ${x.def.id === m.def.id ? 'border-warn text-warn' : open ? 'border-hud/20 text-hud-dim hover:border-hud/50' : 'cursor-not-allowed border-hud/10 text-hud-dim/40'}`}
+              >
+                {x.number} · {x.def.name}{open ? '' : ' · LOCKED'}
+              </button>
+            )
+          })}
+        </div>
+        <div className="mt-4 text-xs tracking-[0.3em] text-warn">MISSION {m.number} // OPERATION {m.def.name}</div>
+        <p className="mt-2 text-[15px] leading-relaxed text-hud/85">{m.def.briefing}</p>
         <div className="mt-5 flex items-center gap-3">
           <span className="hud-label">Insertion</span>
           {(Object.keys(PRESETS) as TimeOfDay[]).map((t) => (
@@ -110,7 +126,7 @@ export function MainMenu() {
         </div>
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button primary onClick={openBriefing}>MISSION BRIEFING</Button>
-          {checkpoint?.missionId === NIGHTFALL.id && (
+          {checkpoint?.missionId === m.def.id && (
             <Button onClick={continueFromCheckpoint}>CONTINUE — {checkpoint.label.split(' — ')[0].toUpperCase()}</Button>
           )}
           <Button onClick={() => useGameStore.setState({ settingsOpen: true })}>SETTINGS</Button>
@@ -124,12 +140,14 @@ export function MainMenu() {
 
 /** Full briefing over the paused world: situation, objectives, intel, approaches and the planning map. */
 export function BriefingScreen() {
-  const m = NIGHTFALL
+  const session = useGameStore((s) => s.session)
+  if (!session) return null
+  const m = session.def
   return (
     <Overlay>
       <div className="panel flex max-h-[94vh] w-[1180px] max-w-[96vw] gap-6 overflow-hidden p-6">
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto pr-2">
-          <div className="hud-label">Mission 01 · Briefing</div>
+          <div className="hud-label">Mission {mission(m.id).number} · Briefing</div>
           <h1 className="mt-1 text-3xl tracking-[0.3em] text-hud">OPERATION {m.name}</h1>
           <Section title="Situation"><p>{m.situation}</p></Section>
           <Section title="Objectives">
@@ -200,7 +218,9 @@ const DETECTION = { none: ['None', 'text-accent'], suspicious: ['Suspicious', 't
 export function ResultsScreen() {
   const r = useGameStore((s) => s.results)
   const [checkpoint] = useState(loadCheckpoint)
+  const missionId = useGameStore((s) => s.missionId)
   if (!r) return null
+  const next = r.success ? nextMission(missionId) : null
   return (
     <Overlay>
       <div className="panel flex w-[40rem] max-w-[94vw] flex-col gap-5 p-8">
@@ -223,7 +243,8 @@ export function ResultsScreen() {
         </div>
         <div className="flex flex-wrap gap-3">
           {!r.success && checkpoint && <Button primary onClick={continueFromCheckpoint}>RESTART CHECKPOINT</Button>}
-          <Button primary={r.success || !checkpoint} onClick={restartMission}>{r.success ? 'PLAY AGAIN' : 'RESTART MISSION'}</Button>
+          {next && <Button primary onClick={() => startMission(next.def.id)}>NEXT MISSION — {next.def.name}</Button>}
+          <Button primary={!next && (r.success || !checkpoint)} onClick={restartMission}>{r.success ? 'PLAY AGAIN' : 'RESTART MISSION'}</Button>
           <Button onClick={quitToMenu}>MAIN MENU</Button>
         </div>
       </div>

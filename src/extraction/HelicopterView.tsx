@@ -5,8 +5,9 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { litMaterial } from '../assets/materials'
 import { getTextures } from '../assets/textures'
 import type { GameSession } from '../game/GameSession'
+import { BoatModel } from './BoatModel'
 
-/** Extraction helicopter driven by the ExtractionSystem's flight path. */
+/** Extraction helicopter (or boat) driven by the ExtractionSystem's flight path and then the escape. */
 export function HelicopterView({ session }: { session: GameSession }) {
   const root = useRef<Group>(null)
   useFrame(() => {
@@ -17,7 +18,7 @@ export function HelicopterView({ session }: { session: GameSession }) {
     g.position.copy(x.heliPos)
     g.rotation.set(0, x.heliYaw, 0)
   })
-  return <group ref={root} visible={false}><HeliModel /></group>
+  return <group ref={root} visible={false}>{session.def.ride === 'boat' ? <BoatModel /> : <HeliModel />}</group>
 }
 
 const UP = new Vector3(0, 1, 0)

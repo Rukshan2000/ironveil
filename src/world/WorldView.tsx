@@ -9,6 +9,7 @@ import { EnvironmentView } from './EnvironmentView'
 import { buildStaticChunks } from './staticGeometry'
 import type { LampDef } from './types'
 import { VegetationView } from './VegetationView'
+import { WaterView } from './WaterView'
 
 /** Terrain material: grass texture blended towards worn dirt by the `splat` vertex attribute. */
 function terrainMaterial() {
@@ -154,6 +155,7 @@ export function WorldView({ session }: { session: GameSession }) {
     <>
       <EnvironmentView session={session} />
       <mesh geometry={terrain.geometry} material={terrain.material} receiveShadow />
+      <WaterView session={session} />
       {chunks.map((c, i) => (
         <mesh key={i} geometry={c.geometry} material={mats[c.mat]} castShadow={c.castShadow} receiveShadow />
       ))}

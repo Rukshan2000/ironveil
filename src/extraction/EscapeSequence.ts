@@ -5,12 +5,16 @@ import type { GameSession } from '../game/GameSession'
 import { settings } from '../state/settings'
 import { clamp } from '../utils/math'
 import { AR_K7 } from '../weapons/definitions'
+import { BOAT_DECK } from './ExtractionSystem'
 
 /**
  * The finale after extraction: the helicopter lifts off with Wren on the right-hand door gun and Kestrel (or the
  * co-op partner) on the left, circles out of the valley while Varn gunships come after it in two waves, and flies
  * home once they are all down. The player aims with the mouse and fires the door gun; tracers, hits, mid-air
  * explosions, burning wrecks spiralling into the ridge. If the hull is shot through, the helicopter goes down.
+ *
+ * Boat missions (`def.ride === 'boat'`) run the same fight on the river: the boat heads downriver with Wren on the
+ * stern gun, Varn patrol boats come down the lane behind it, and wrecks burn and sink instead of falling.
  */
 
 const CENTER = new Vector3(0, 0, -10)
@@ -24,6 +28,9 @@ const GUN_DAMAGE = 6
 const GUNSHIP_HP = 100
 const HIT_RADIUS = 4
 const WAVES = [2, 2]
+/** Boat: cruising speed downriver (m/s) and how far behind the patrol boats hold station (m). */
+const BOAT_SPEED = 6
+const CHASE_GAP = 34
 
 export interface Gunship {
   pos: Vector3
@@ -63,20 +70,44 @@ export class EscapeSequence {
   private readonly start: Vector3
   private crashT = 0
   private partnerCd = 0
+  /** Boat ride: on the river lane (null = helicopter). */
+  private readonly boat: { u: number } | null
 
   constructor(private readonly s: GameSession) {
     this.start = s.extraction.heliPos.clone()
     this.angle = Math.atan2(this.start.x - CENTER.x, this.start.z - CENTER.z)
+    this.boat = s.def.ride === 'boat' && s.river ? { u: s.river.nearest(this.start.x, this.start.z) } : null
     // aboard: no walking body, nothing to shoot at on the ground
     s.player.active = false
     s.player.character.collider.setEnabled(false)
-    s.radio.say('handler', 'CANOPY', 'Wheels up. Varn gunships are scrambling — get on the door gun.')
-    this.message = 'GET ON THE DOOR GUN'
+    if (this.boat) {
+      s.radio.say('handler', 'CANOPY', 'Throttle up! Patrol boats are coming off the dam behind you — get on the stern gun.')
+      this.message = 'GET ON THE STERN GUN'
+    } else {
+      s.radio.say('handler', 'CANOPY', 'Wheels up. Varn gunships are scrambling — get on the door gun.')
+      this.message = 'GET ON THE DOOR GUN'
+    }
+  }
+
+  /** What's chasing us, for the HUD. */
+  get enemyLabel() {
+    return this.boat ? 'PATROL BOATS' : 'GUNSHIPS'
+  }
+
+  get gunLabel() {
+    return this.boat ? 'STERN GUN' : 'DOOR GUN'
+  }
+
+  /** Yaw the gun points along with no aim offset: out of the right door, or off the stern. */
+  private get gunBase() {
+    const H = this.s.extraction.heliYaw
+    return this.boat ? H + Math.PI : H - Math.PI / 2
   }
 
   /** Where our helicopter is and which way it faces (`heliYaw`: forward = (-sin, 0, -cos)). */
   private fly(dt: number) {
     const x = this.s.extraction
+    if (this.boat) return this.sail(dt)
     if (this.phase === 'down') {
       // shot down: spinning, losing height towards the ridge
       this.crashT += dt
@@ -99,6 +130,21 @@ export class EscapeSequence {
     x.heliYaw = Math.atan2(Math.cos(this.angle), -Math.sin(this.angle))
   }
 
+  /** Boat: downriver along the lane, picking up speed; holed, it settles and sinks. */
+  private sail(dt: number) {
+    const x = this.s.extraction
+    const r = this.s.river!
+    if (this.phase === 'down') {
+      x.heliPos.y -= dt * 0.5
+      x.heliYaw += dt * 0.2
+      return
+    }
+    const speed = BOAT_SPEED * clamp(this.t / LIFT, 0.15, 1) * (this.phase === 'home' || this.phase === 'escaped' ? 1.6 : 1)
+    this.boat!.u = Math.min(0.995, this.boat!.u + (speed * dt) / r.length)
+    r.at(this.boat!.u, x.heliPos).y += BOAT_DECK + Math.sin(this.t * 2.2) * 0.06
+    x.heliYaw = r.yaw(this.boat!.u, 1)
+  }
+
   update(dt: number) {
     const s = this.s
     this.t += dt
@@ -110,7 +156,11 @@ export class EscapeSequence {
     s.player.feet.copy(heli) // so guards/minimap/listener follow the helicopter
 
     if (this.phase === 'down') {
-      if (heli.y < s.terrain.height(heli.x, heli.z) + 2) {
+      if (this.boat && heli.y < s.river!.y - 1.2) {
+        s.status = 'dead'
+        return
+      }
+      if (!this.boat && heli.y < s.terrain.height(heli.x, heli.z) + 2) {
         this.boom(heli, 2)
         s.status = 'dead'
       }
@@ -128,8 +178,10 @@ export class EscapeSequence {
     if (this.phase === 'fight' && this.wave < WAVES.length && this.t >= this.nextWave && this.gunships.every((g) => g.state !== 'alive')) {
       for (let i = 0; i < WAVES[this.wave]; i++) this.spawn(i)
       this.wave++
-      s.radio.say('handler', 'CANOPY', this.wave === 1 ? 'Two gunships on your right, closing fast!' : 'Second pair coming in — keep them off us!')
-      this.message = `GUNSHIPS INBOUND — ${this.total - this.kills} LEFT`
+      s.radio.say('handler', 'CANOPY', this.boat
+        ? (this.wave === 1 ? 'Two patrol boats behind you, closing fast!' : 'Second pair coming round the bend — keep them off us!')
+        : (this.wave === 1 ? 'Two gunships on your right, closing fast!' : 'Second pair coming in — keep them off us!'))
+      this.message = `${this.enemyLabel} INBOUND — ${this.total - this.kills} LEFT`
     }
 
     this.fireDoorGun(dt)
@@ -138,8 +190,8 @@ export class EscapeSequence {
 
     if (this.phase === 'fight' && this.kills >= this.total) {
       this.phase = 'home'
-      this.message = 'VALLEY CLEAR — HEADING HOME'
-      s.radio.say('handler', 'CANOPY', "That's the last of them. Bird's clear — bringing you home, WREN.")
+      this.message = this.boat ? 'RIVER CLEAR — HEADING HOME' : 'VALLEY CLEAR — HEADING HOME'
+      s.radio.say('handler', 'CANOPY', this.boat ? "That's the last of them. River's clear — open her up and come home, WREN." : "That's the last of them. Bird's clear — bringing you home, WREN.")
       this.nextWave = this.t + 7
     }
     if (this.phase === 'home' && this.t >= this.nextWave) {
@@ -148,8 +200,8 @@ export class EscapeSequence {
     }
     if (this.hull <= 0 && this.phase === 'fight') {
       this.phase = 'down'
-      this.message = "WE'RE HIT — GOING DOWN"
-      s.radio.say('handler', 'CANOPY', 'Mayday, mayday — bird is going down!')
+      this.message = this.boat ? "WE'RE HOLED — SHE'S SINKING" : "WE'RE HIT — GOING DOWN"
+      s.radio.say('handler', 'CANOPY', this.boat ? "You're taking water — WREN, get out of there!" : 'Mayday, mayday — bird is going down!')
     }
   }
 
@@ -157,20 +209,32 @@ export class EscapeSequence {
   applyCamera(camera: Camera) {
     const heli = this.s.extraction.heliPos
     const H = this.s.extraction.heliYaw
-    camera.position.copy(heli).addScaledVector(right.set(Math.cos(H), 0, -Math.sin(H)), 1.25).add(up.clone().multiplyScalar(0.55))
-    camera.rotation.set(this.aimPitch, H - Math.PI / 2 + this.aimYaw, this.phase === 'down' ? Math.sin(this.t * 9) * 0.3 : Math.sin(this.t * 0.8) * 0.02, 'YXZ')
+    if (this.boat) camera.position.copy(heli).addScaledVector(fwd.set(-Math.sin(H), 0, -Math.cos(H)), -1.6).add(up.clone().multiplyScalar(1.45))
+    else camera.position.copy(heli).addScaledVector(right.set(Math.cos(H), 0, -Math.sin(H)), 1.25).add(up.clone().multiplyScalar(0.55))
+    const roll = this.phase === 'down' ? Math.sin(this.t * 9) * (this.boat ? 0.12 : 0.3) : Math.sin(this.t * (this.boat ? 1.7 : 0.8)) * (this.boat ? 0.035 : 0.02)
+    camera.rotation.set(this.aimPitch, this.gunBase + this.aimYaw, roll, 'YXZ')
     return true
   }
 
   /** Where the partner sits: the left door. */
   partnerSeat(out: Vector3) {
     const H = this.s.extraction.heliYaw
-    return out.copy(this.s.extraction.heliPos).addScaledVector(v.set(-Math.cos(H), 0, Math.sin(H)), 0.9).setY(this.s.extraction.heliPos.y - 0.6)
+    return out.copy(this.s.extraction.heliPos).addScaledVector(v.set(-Math.cos(H), 0, Math.sin(H)), 0.9).setY(this.s.extraction.heliPos.y - (this.boat ? 0 : 0.6))
   }
 
   private spawn(i: number) {
     const s = this.s
     const heli = s.extraction.heliPos
+    if (this.boat) {
+      // patrol boats come down the lane from the dam, well behind us, then close to station
+      const from = s.river!.at(this.boat.u - (110 + i * 25) / s.river!.length).setY(s.river!.y + BOAT_DECK)
+      this.gunships.push({
+        pos: from, yaw: 0, hp: GUNSHIP_HP, state: 'alive', fire: 3 + i * 1.5, burst: 0, spin: 0, fall: new Vector3(), hitAt: -9,
+        slot: new Vector3(CHASE_GAP + i * 16, i % 2 ? 2.6 : -2.6, 0),
+        rotor: audio.loop('engine', from, 0.9),
+      })
+      return
+    }
     // they come up from the base side (our right) and from behind
     const from = heli.clone().addScaledVector(right, 160 + i * 30).addScaledVector(fwd, -120 + i * 60).setY(heli.y - 20)
     const g: Gunship = {
@@ -185,6 +249,18 @@ export class EscapeSequence {
     const s = this.s
     if (g.state === 'gone') return
     g.rotor?.move(g.pos)
+    if (g.state === 'falling' && this.boat) {
+      // holed patrol boat: burns, settles and goes under
+      g.pos.y -= dt * 0.45
+      g.yaw += g.spin * dt * 0.15
+      s.effects.emit('fire', g.pos, up, 2, 1.2)
+      s.effects.emit('smoke', g.pos, up, 2, 1)
+      if (g.pos.y < s.river!.y - 2.2) {
+        g.rotor?.stop()
+        g.state = 'gone'
+      }
+      return
+    }
     if (g.state === 'falling') {
       // burning wreck: spinning, trailing fire and smoke, until it hits the ground
       g.fall.y -= 9.8 * dt
@@ -199,9 +275,18 @@ export class EscapeSequence {
       }
       return
     }
-    // hold a station off our right side, drifting so it's a moving target
     const drift = this.t * 0.35 + g.slot.x
-    w.copy(heli).addScaledVector(right, g.slot.x + Math.sin(drift) * 10).addScaledVector(fwd, g.slot.y + Math.cos(drift * 0.7) * 14).setY(heli.y + g.slot.z + Math.sin(drift * 1.3) * 5)
+    if (this.boat) {
+      // hold a station behind us on the river, weaving across the lane
+      const r = this.s.river!
+      const u = this.boat.u - (g.slot.x + Math.sin(drift) * 8) / r.length
+      r.at(u, w)
+      const lane = r.yaw(u, 1)
+      w.addScaledVector(v.set(Math.cos(lane), 0, -Math.sin(lane)), g.slot.y * Math.sin(drift * 0.8)).setY(r.y + BOAT_DECK + Math.sin(this.t * 2.5 + g.slot.x) * 0.08)
+    } else {
+      // hold a station off our right side, drifting so it's a moving target
+      w.copy(heli).addScaledVector(right, g.slot.x + Math.sin(drift) * 10).addScaledVector(fwd, g.slot.y + Math.cos(drift * 0.7) * 14).setY(heli.y + g.slot.z + Math.sin(drift * 1.3) * 5)
+    }
     const before = g.pos.clone()
     g.pos.lerp(w, 1 - Math.exp(-0.7 * dt))
     g.fall.subVectors(g.pos, before).divideScalar(Math.max(dt, 1e-3)) // velocity, kept for when it falls
@@ -233,12 +318,14 @@ export class EscapeSequence {
     if (!input.down('fire') || this.gunCd > 0 || this.phase === 'down' || this.phase === 'escaped') return
     this.gunCd = GUN_RATE
     const H = s.extraction.heliYaw
-    const yaw = H - Math.PI / 2 + this.aimYaw
+    const yaw = this.gunBase + this.aimYaw
     const dir = new Vector3(-Math.sin(yaw) * Math.cos(this.aimPitch), Math.sin(this.aimPitch), -Math.cos(yaw) * Math.cos(this.aimPitch))
     dir.x += (Math.random() - 0.5) * 0.02
     dir.y += (Math.random() - 0.5) * 0.02
     dir.normalize()
-    const muzzle = s.extraction.heliPos.clone().addScaledVector(right.set(Math.cos(H), 0, -Math.sin(H)), 1.9).add(v.set(0, 0.35, 0))
+    const muzzle = this.boat
+      ? s.extraction.heliPos.clone().addScaledVector(fwd.set(-Math.sin(H), 0, -Math.cos(H)), -2.2).add(v.set(0, 1.2, 0))
+      : s.extraction.heliPos.clone().addScaledVector(right.set(Math.cos(H), 0, -Math.sin(H)), 1.9).add(v.set(0, 0.35, 0))
     s.ballistics.fire(muzzle, dir, AR_K7.ballistics, 0, { head: 1, limb: 1 }, { kind: 'peer' }, undefined, true)
     s.effects.muzzle(muzzle, dir, 1.6)
     audio.gunshot(AR_K7.sound, muzzle)
@@ -285,7 +372,8 @@ export class EscapeSequence {
     g.spin = (Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 2)
     this.boom(g.pos, 1.2)
     this.kills++
-    this.message = this.kills >= this.total ? 'ALL GUNSHIPS DOWN' : `GUNSHIP DOWN — ${this.total - this.kills} LEFT`
+    const name = this.boat ? 'PATROL BOAT' : 'GUNSHIP'
+    this.message = this.kills >= this.total ? `ALL ${name}S DOWN` : `${name} DOWN — ${this.total - this.kills} LEFT`
     audio.cue('kill')
   }
 

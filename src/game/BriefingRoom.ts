@@ -7,7 +7,8 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { hush, say } from '../audio/speech'
 import { pointBone } from '../characters/GltfSoldier'
 import { BUDDY_NAME } from '../ai/BuddyBot'
-import { NIGHTFALL } from '../missions/nightfall'
+import { LOW_WATER_BRIEF } from '../missions/lowWaterStory'
+import type { MissionDef } from '../missions/types'
 import { useGameStore } from '../state/gameStore'
 import type { LevelLayout } from '../world/types'
 
@@ -43,11 +44,13 @@ const canonical = (name: string) => {
   const n = name.toLowerCase().replace(/^(mixamorig:?|bip0?0?1[ _]?|def-|armature_?|cc_base_)/, '').replace(/[\s:]/g, '')
   return Object.keys(BONE_ALIASES).find((k) => BONE_ALIASES[k].includes(n))
 }
-export const OFFICE_LENGTH = 56
-
-type Topic = 'logo' | 'overview' | 'dawn' | 'entry' | 'compound' | 'uplink' | 'security' | 'support' | 'extract'
 type Shot = 'wide' | 'close' | 'screen'
-export const EVA_LINES: { from: number; to: number; text: string; topic: Topic; shot: Shot; gesture?: boolean }[] = [
+export interface EvaLine { from: number; to: number; text: string; topic: string; shot: Shot; gesture?: boolean }
+export interface TopicDef { title: string; lines: string[]; at: [number, number][] }
+/** A mission's briefing: EVA's lines (with the screen topic and camera for each), the topics, and the film's screen. */
+export interface Brief { lines: EvaLine[]; topics: Record<string, TopicDef>; showcase: string }
+
+const NIGHTFALL_LINES: EvaLine[] = [
   { from: 1.5, to: 6.6, topic: 'logo', shot: 'wide', text: "Wren. I'm Eva, operations. Take a seat — we don't have long." },
   { from: 7, to: 13.2, topic: 'overview', shot: 'screen', gesture: true, text: 'This is Halvard Ridge, a signals station on the border. For six weeks it has relayed coded orders we cannot read.' },
   { from: 13.6, to: 19.2, topic: 'dawn', shot: 'close', text: 'We believe those orders are for an attack on the valley, at dawn. We need to know where, and when.' },
@@ -67,7 +70,7 @@ export const EVA_LINES: { from: number; to: number; text: string; topic: Topic; 
   { from: 50.6, to: 55.6, topic: 'extract', shot: 'close', text: 'Then get to the north-west pad. A helicopter will be waiting. Stay low, stay dark. Good luck.' },
 ]
 
-const TOPIC: Record<Topic, { title: string; lines: string[]; at: [number, number][] }> = {
+const NIGHTFALL_TOPICS: Record<string, TopicDef> = {
   logo: { title: 'OPERATION NIGHTFALL', lines: ['Mission briefing — eyes only', 'Operative: WREN · Handler: CANOPY'], at: [] },
   overview: { title: 'HALVARD RIDGE SIGNALS STATION', lines: ['9th Signals Detachment', '19 guards · cameras · two towers', 'Relays coded orders across the border'], at: [[0, -10]] },
   dawn: { title: 'THREAT: ATTACK AT DAWN', lines: ['Coded orders point to a move on the valley', 'Target and timing unknown', 'We need those orders tonight'], at: [[44, -50]] },
@@ -86,6 +89,9 @@ const TOPIC: Record<Topic, { title: string; lines: string[]; at: [number, number
   },
   extract: { title: '4 · EXTRACT', lines: ['Helicopter — north-west landing pad', 'Hold the LZ until it lands', 'Stay low · stay dark'], at: [[-48, -54]] },
 }
+
+const NIGHTFALL_BRIEF: Brief = { lines: NIGHTFALL_LINES, topics: NIGHTFALL_TOPICS, showcase: 'dawn' }
+const BRIEFS: Record<string, Brief> = { nightfall: NIGHTFALL_BRIEF, 'low-water': LOW_WATER_BRIEF }
 
 // room layout (metres): EVA by the screen on the back wall, the camera sits at the table
 const EVA_AT = new Vector3(-1.45, 0, -1.85)
@@ -169,11 +175,10 @@ function buildRoom(scene: Scene) {
 }
 
 /** Stylised station map plus a text panel for the current topic. */
-function drawScreen(ctx: CanvasRenderingContext2D, layout: LevelLayout, topic: Topic, t: number) {
+function drawScreen(ctx: CanvasRenderingContext2D, layout: LevelLayout, def: MissionDef, info: TopicDef, t: number) {
   const W = ctx.canvas.width, H = ctx.canvas.height
   ctx.fillStyle = '#06101a'
   ctx.fillRect(0, 0, W, H)
-  const info = TOPIC[topic]
   // map: north (−z) up
   const mx = (x: number) => 40 + ((x + 75) / 150) * 560
   const my = (z: number) => 40 + ((z + 75) / 140) * 500
@@ -186,13 +191,24 @@ function drawScreen(ctx: CanvasRenderingContext2D, layout: LevelLayout, topic: T
     if (b.collide === false || b.s[1] < 2.2 || Math.abs(b.p[0]) > 80 || b.p[2] < -80 || b.p[2] > 70) continue
     ctx.fillRect(mx(b.p[0] - b.s[0] / 2), my(b.p[2] - b.s[2] / 2), Math.max(1, (b.s[0] / 150) * 560), Math.max(1, (b.s[2] / 140) * 500))
   }
+  // the river, if any
+  const river = layout.water?.river
+  if (river) {
+    ctx.strokeStyle = '#2f6f9a'
+    ctx.lineWidth = 8
+    ctx.beginPath()
+    river.forEach(([x, z], i) => (i ? ctx.lineTo(mx(x), my(Math.min(z, 70))) : ctx.moveTo(mx(x), my(Math.min(z, 70)))))
+    ctx.stroke()
+  }
+  // the area to get into: the first "enter" objective
+  const area = def.objectives.find((o) => o.kind === 'enter')
   ctx.setLineDash([6, 5])
   ctx.strokeStyle = '#7fb6d6'
   ctx.lineWidth = 1.5
-  ctx.strokeRect(mx(-62), my(-66), mx(66) - mx(-62), my(44) - my(-66))
-  if (topic === 'entry') {
+  if (area?.kind === 'enter') ctx.strokeRect(mx(area.rect[0]), my(area.rect[1]), mx(area.rect[2]) - mx(area.rect[0]), my(area.rect[3]) - my(area.rect[1]))
+  if (info.title.includes('INSIDE')) {
     ctx.strokeStyle = '#ffd36b'
-    for (const a of NIGHTFALL.approaches ?? []) {
+    for (const a of def.approaches ?? []) {
       if (!a.name.match(/^[ABC]/)) continue
       ctx.beginPath()
       a.path?.forEach(([x, z], i) => (i ? ctx.lineTo(mx(x), my(Math.min(z, 70))) : ctx.moveTo(mx(x), my(Math.min(z, 70)))))
@@ -242,7 +258,7 @@ function drawScreen(ctx: CanvasRenderingContext2D, layout: LevelLayout, topic: T
   })
   ctx.fillStyle = '#4f7a94'
   ctx.font = '14px monospace'
-  ctx.fillText('OPERATION NIGHTFALL · EYES ONLY', 662, 530)
+  ctx.fillText(`OPERATION ${def.name} · EYES ONLY`, 662, 530)
 }
 
 /**
@@ -349,6 +365,9 @@ class BriefingRoom {
   private bones: Record<string, Bone> = {}
   private screen: { ctx: CanvasRenderingContext2D; tex: CanvasTexture } | null = null
   private layout: LevelLayout | null = null
+  private def: MissionDef | null = null
+  /** The loaded mission's briefing. */
+  brief: Brief = NIGHTFALL_BRIEF
   private spoken = new Set<number>()
   private redraw = 0
   private gesture = 0
@@ -417,8 +436,15 @@ class BriefingRoom {
     this.eva!.rotation.y = 0.35
   }
 
-  start(layout: LevelLayout) {
+  /** Seconds EVA's briefing runs. */
+  get length() {
+    return this.brief.lines[this.brief.lines.length - 1].to + 0.4
+  }
+
+  start(layout: LevelLayout, def: MissionDef) {
     this.layout = layout
+    this.def = def
+    this.brief = BRIEFS[def.id] ?? NIGHTFALL_BRIEF
     this.spoken.clear()
     this.load()
   }
@@ -431,8 +457,9 @@ class BriefingRoom {
   /** Advances the briefing to `t` seconds: camera shot, screen, EVA's pose and her lines. */
   update(t: number, camera: PerspectiveCamera) {
     this.active = true
-    const i = Math.max(0, EVA_LINES.findIndex((l) => t < l.to))
-    const line = EVA_LINES[i]
+    const lines = this.brief.lines
+    const i = Math.max(0, lines.findIndex((l) => t < l.to))
+    const line = lines[i]
     // speak each line once when it starts
     if (t >= line.from && !this.spoken.has(i)) {
       this.spoken.add(i)
@@ -447,20 +474,20 @@ class BriefingRoom {
     camera.fov = shot.fov
     camera.updateProjectionMatrix()
 
-    if (this.screen && this.layout && (this.redraw -= 1) <= 0) {
+    if (this.screen && this.layout && this.def && (this.redraw -= 1) <= 0) {
       this.redraw = 3
-      drawScreen(this.screen.ctx, this.layout, t < line.from ? EVA_LINES[Math.max(0, i - 1)].topic : line.topic, t)
+      drawScreen(this.screen.ctx, this.layout, this.def, this.brief.topics[t < line.from ? lines[Math.max(0, i - 1)].topic : line.topic], t)
       this.screen.tex.needsUpdate = true
     }
     this.pose(t, t >= line.from && t <= line.to, !!line.gesture && t > line.from + 0.6 && t < line.to - 0.8, camera.position)
   }
 
   /** Story film: EVA at her screen decoding the intercept — talking and gesturing, no lines; the caller places the camera. */
-  showcase(t: number, camera: PerspectiveCamera) {
+  showcase(t: number, camera: PerspectiveCamera, topic = this.brief.showcase) {
     this.active = true
-    if (this.screen && this.layout && (this.redraw -= 1) <= 0) {
+    if (this.screen && this.layout && this.def && (this.redraw -= 1) <= 0) {
       this.redraw = 3
-      drawScreen(this.screen.ctx, this.layout, 'dawn', t)
+      drawScreen(this.screen.ctx, this.layout, this.def, this.brief.topics[topic], t)
       this.screen.tex.needsUpdate = true
     }
     this.pose(t, true, t % 5 > 2, camera.position)

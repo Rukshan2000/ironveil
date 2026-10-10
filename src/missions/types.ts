@@ -45,6 +45,10 @@ export interface MissionDef {
   objectives: ObjectiveDef[]
   /** Seconds the player must hold the LZ once extraction is called. */
   extractionTime?: number
+  /** How the team leaves: helicopter and gunship escape (default) or boat downriver chased by patrol boats. */
+  ride?: 'heli' | 'boat'
+  /** Mission-specific lines for the generic systems (defaults are Nightfall's). */
+  radio?: { alarm?: string; lockdown?: string; extractionCalled?: string; extracted?: string }
 }
 
 /** Gameplay events the objective manager listens to. */

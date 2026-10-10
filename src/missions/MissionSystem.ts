@@ -40,6 +40,11 @@ export class MissionSystem {
     if (!this.over) this.set('SUCCESS')
   }
 
+  /** Scripted failure (a mission timer ran out). */
+  fail() {
+    if (!this.over) this.set('FAILED')
+  }
+
   update(dt: number, ctx: MissionContext) {
     this.time += dt
     this.stateTime += dt

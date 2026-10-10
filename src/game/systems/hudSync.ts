@@ -122,6 +122,6 @@ export function buildResults(s: GameSession): MissionResults {
     intel: { collected: intelIds.filter((id) => s.objectives.status[id] === 'done').length, total: intelIds.length },
     accuracy: s.stats.shots ? s.stats.hits / s.stats.shots : null,
     headshots: s.stats.headshots,
-    cause: s.player.deathCause,
+    cause: s.failReason ?? s.player.deathCause,
   }
 }

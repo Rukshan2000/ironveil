@@ -229,6 +229,11 @@ export interface LevelLayout {
   channels: [number, number, number, number, number, number][]
   /** Visual marker for the extraction zone. */
   extraction: { position: Vector3Tuple; radius: number }
+  /**
+   * Visual water (no swimming: the channels are wading depth). `y` is the river surface, shown wherever the terrain
+   * dips below it; `river` is its course ([x, z], upstream first) for boats; `reservoir` floods everything north of `z`.
+   */
+  water?: { y: number; river: [number, number][]; reservoir?: { y: number; z: number } }
   /** Climbable ladders: stand at `bottom` (or on `top`) and use them. */
   ladders?: LadderDef[]
   /** Health packs [x, z]; each sits on the floor/table there and restores health once. */

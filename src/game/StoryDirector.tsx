@@ -40,7 +40,7 @@ function Actor({ look: lk, load, act }: { look: SoldierLook; load?: () => Promis
   const anim = useMemo(newAnim, [])
   useFrame((_, dt) => {
     const { shot, lt } = shotAt(story.t)
-    const on = useGameStore.getState().phase === 'story' && shot.where === 'stage' && act(shot.id, lt, g.current!, anim)
+    const on = useGameStore.getState().phase === 'story' && shot.where === 'stage' && act(shot.stage ?? shot.id, lt, g.current!, anim)
     g.current!.visible = on
     if (on) rig.update(Math.min(dt, 0.05), anim)
   })
@@ -77,7 +77,7 @@ function Banner() {
   }, [])
   useFrame(() => {
     const { shot, lt } = shotAt(story.t)
-    g.current!.visible = shot.id === 'army'
+    g.current!.visible = (shot.stage ?? shot.id) === 'army'
     g.current!.rotation.z = Math.sin(lt * 1.5) * 0.02
   })
   return (
@@ -96,7 +96,8 @@ function Banner() {
 function RadioDesk() {
   const g = useRef<Group>(null)
   useFrame(() => {
-    g.current!.visible = shotAt(story.t).shot.id === 'canopy'
+    const { shot } = shotAt(story.t)
+    g.current!.visible = (shot.stage ?? shot.id) === 'canopy'
   })
   return (
     <group ref={g} visible={false} position={[0, 0, 0.75]}>
@@ -137,10 +138,11 @@ export function StoryDirector({ session, vm }: { session: GameSession; vm: { sce
     vm.scene.visible = false // no first-person gun in the film
     storyRender.scene = shot.where === 'stage' ? stage : null
     if (shot.where !== 'office') briefingRoom.active = false
-    h.visible = shot.id === 'mission'
+    const set = shot.stage ?? shot.id
+    h.visible = set === 'mission'
     let fov = 45
 
-    switch (shot.id) {
+    switch (set) {
       case 'valley': {
         // high over the valley from the south, drifting towards the ridge
         const k = ease(lt / shot.dur)
@@ -172,11 +174,11 @@ export function StoryDirector({ session, vm }: { session: GameSession; vm: { sce
       }
       case 'eva': {
         // her real office: start on EVA, then over her shoulder to the screen
-        if (!briefingRoom.active) briefingRoom.start(session.layout)
+        if (!briefingRoom.active) briefingRoom.start(session.layout, session.def)
         const k = ease((lt - 3.5) / 3)
         cam.position.set(-0.75 + k * 1.1, 1.52 - k * 0.1, 0.2 + k * 0.6)
         look.set(-1.45 + k * 2.1, 1.5 + k * 0.05, -1.85 - k * 1.0)
-        briefingRoom.showcase(lt, cam)
+        briefingRoom.showcase(lt, cam, shot.topic)
         fov = 36
         break
       }
@@ -206,6 +208,14 @@ export function StoryDirector({ session, vm }: { session: GameSession; vm: { sce
         look.set(0, 1.3, 0)
         fov = 38
         break
+      default: {
+        // shots that bring their own camera (later missions' world shots)
+        const c = shot.cam?.(lt, ground)
+        if (!c) break
+        cam.position.copy(c.pos)
+        look.copy(c.look)
+        fov = c.fov ?? fov
+      }
     }
     cam.lookAt(look)
     if (cam.fov !== fov) {

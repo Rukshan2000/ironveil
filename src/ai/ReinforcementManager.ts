@@ -71,7 +71,7 @@ export class ReinforcementManager {
         s.notify(`Security level ${q.def.minLevel}: +${q.members.length} enemy reinforcements by truck`, 'warn')
       }
       if (s.vehicles.drive(source.convoy.vehicle, source.convoy.route, unload)) {
-        s.radio.say('enemy', 'Control', 'Convoy, get your people up the south road. Intruder on site.')
+        s.radio.say('enemy', 'Control', `Convoy, get your people up ${source.label}. Intruder on site.`)
         return
       }
     }

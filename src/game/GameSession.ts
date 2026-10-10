@@ -13,6 +13,8 @@ import { SURFACES } from '../combat/surfaces'
 import { EffectsSystem } from '../effects/EffectsSystem'
 import { createGuardEntity, updateGuards, type GuardEntity } from '../enemies/guards'
 import { EscapeSequence } from '../extraction/EscapeSequence'
+import { markCompleted } from '../missions/registry'
+import { RiverPath } from '../world/river'
 import { ExtractionSystem } from '../extraction/ExtractionSystem'
 import { saveCheckpoint } from '../missions/checkpoint'
 import { MissionSystem } from '../missions/MissionSystem'
@@ -68,6 +70,8 @@ export class GameSession {
   readonly vegetation: Vegetation
   readonly physics: Physics
   readonly environment: Environment
+  /** Boat lane down the level's river (boat insertion, extraction and escape), if it has one. */
+  readonly river: RiverPath | null
   readonly nav: NavGrid
   readonly coverPoints: CoverPoint[]
   readonly player: PlayerController
@@ -121,6 +125,8 @@ export class GameSession {
   pathBudget = 0
   time = 0
   status: 'playing' | 'dead' | 'complete' = 'playing'
+  /** Why a scripted failure ended the mission (shown in the debrief instead of the death cause). */
+  failReason: string | null = null
   prompt: { text: string; progress: number | null } | null = null
   /** Counts shots for the view-model recoil spring. */
   recoilImpulses = 0
@@ -155,6 +161,7 @@ export class GameSession {
     this.vegetation = generateVegetation(layout, this.terrain)
     this.physics = new Physics([...layout.boxes, ...this.vegetation.colliders], this.terrain)
     this.environment = new Environment(timeOfDay, layout, this.terrain, this.physics)
+    this.river = layout.water ? new RiverPath(layout.water.river, layout.water.y) : null
     this.nav = new NavGrid(layout.bounds, layout.boxes)
     this.coverPoints = buildCoverPoints(layout.boxes, this.nav)
     this.pickups = layout.pickups.map((p) => ({ ...p, taken: false }))
@@ -233,15 +240,21 @@ export class GameSession {
   private onAlertChange(level: number, prev: number) {
     const area = this.areaName(this.alert.lastKnown)
     if (level === 2 && prev < 2) this.radio.say('enemy', 'Control', `All units, remain alert. Intruder reported near ${area}.`)
-    if (level >= 3 && prev < 3) this.radio.say('handler', 'CANOPY', 'They\'ve sounded the alarm. Reaction teams will come from the barracks and up the south road. Keep moving.')
+    if (level >= 3 && prev < 3) this.radio.say('handler', 'CANOPY', this.def.radio?.alarm ?? 'They\'ve sounded the alarm. Reaction teams will come from the barracks and up the south road. Keep moving.')
     if (level === 4) {
       this.security.setLockdown(true)
-      this.radio.say('enemy', 'Control', 'Lock down the communications building! Seal every compound gate!')
+      this.radio.say('enemy', 'Control', this.def.radio?.lockdown ?? 'Lock down the communications building! Seal every compound gate!')
       this.notify('FULL LOCKDOWN — secure doors sealed', 'warn')
     }
     if (prev === 4 && level < 4) this.security.setLockdown(false)
     if (level === 0 && prev >= 2) this.radio.say('enemy', 'Control', 'All units, resume normal patrols.')
     if (level > prev && level >= 2) this.notify(`Security level ${level} — ${ALERT_LABELS[level as 2]}`, 'warn')
+  }
+
+  /** Ends the mission as failed for a scripted reason. */
+  fail(reason: string) {
+    this.failReason = reason
+    this.mission.fail()
   }
 
   /** Saves a checkpoint after meaningful progress — never mid-firefight. */
@@ -271,6 +284,7 @@ export class GameSession {
     if (this.status !== 'playing') return
     if (this.time >= this.endAt) {
       this.status = 'complete'
+      markCompleted(this.def.id)
       return
     }
     this.time += dt

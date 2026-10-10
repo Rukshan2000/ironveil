@@ -1,11 +1,9 @@
 import { audio } from '../audio/AudioSystem'
 import { GameSession } from '../game/GameSession'
 import { applyCheckpoint, keepKills, loadCheckpoint } from '../missions/checkpoint'
-import { NIGHTFALL } from '../missions/nightfall'
-import { NIGHTFALL_EVENTS } from '../missions/nightfallEvents'
+import { mission } from '../missions/registry'
 import { useGameStore } from '../state/gameStore'
 import type { TimeOfDay } from '../world/environment'
-import { compoundLayout } from '../world/compoundLayout'
 
 export const requestLock = () => {
   // Chrome rejects re-locking for ~1s after Esc; the player can simply click again.
@@ -15,7 +13,8 @@ export const requestLock = () => {
 async function load(time: TimeOfDay) {
   const { session: old, setPhase } = useGameStore.getState()
   setPhase('loading')
-  const session = await GameSession.create(compoundLayout, NIGHTFALL, time, NIGHTFALL_EVENTS)
+  const m = mission(useGameStore.getState().missionId)
+  const session = await GameSession.create(m.layout, m.def, time, m.events)
   useGameStore.setState({ session, messages: [], radio: [], hud: null, stats: null, results: null, mapOpen: false })
   old?.dispose()
   return session
@@ -33,6 +32,17 @@ export async function startGame() {
   audio.unlock()
   await load(useGameStore.getState().timeOfDay)
   useGameStore.getState().setPhase('story')
+}
+
+/** Picks the mission the next START / BRIEFING / RESTART loads. */
+export function selectMission(id: string) {
+  useGameStore.setState({ missionId: id })
+}
+
+/** Results NEXT MISSION: straight into the next mission's story film. */
+export async function startMission(id: string) {
+  selectMission(id)
+  await startGame()
 }
 
 /** Story film finished or skipped → the mission briefing. */
@@ -75,7 +85,7 @@ export async function continueFromCheckpoint() {
   if (!c) return
   audio.unlock()
   requestLock()
-  useGameStore.setState({ timeOfDay: c.timeOfDay })
+  useGameStore.setState({ timeOfDay: c.timeOfDay, missionId: c.missionId })
   const s = await load(c.timeOfDay)
   applyCheckpoint(s, c)
   useGameStore.getState().setPhase('playing')

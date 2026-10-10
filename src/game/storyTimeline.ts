@@ -1,5 +1,6 @@
-import type { Scene } from 'three'
+import type { Scene, Vector3 } from 'three'
 import { BUDDY_NAME } from '../ai/BuddyBot'
+import { LOW_WATER_SHOTS } from '../missions/lowWaterStory'
 import { useGameStore } from '../state/gameStore'
 
 /**
@@ -8,7 +9,19 @@ import { useGameStore } from '../state/gameStore'
  */
 export type Where = 'world' | 'stage' | 'office' | 'title'
 export interface Card { name: () => string; role: () => string; color: string; at: number }
-export interface Shot { id: string; dur: number; where: Where; text: () => string; card?: Card }
+export interface Shot {
+  id: string
+  dur: number
+  where: Where
+  text: () => string
+  card?: Card
+  /** Reuse a stage set / camera move built for another shot id (StoryDirector: 'army', 'partner', 'canopy', 'eva'). */
+  stage?: string
+  /** Office shots: what EVA's wall screen shows. */
+  topic?: string
+  /** Camera for shots StoryDirector has no move for; `ground(x, z, up)` is a point above the terrain. */
+  cam?: (lt: number, ground: (x: number, z: number, up: number) => Vector3) => { pos: Vector3; look: Vector3; fov?: number }
+}
 
 const solo = () => useGameStore.getState().buddyActive
 
@@ -42,7 +55,12 @@ export const SHOTS: Shot[] = [
   { id: 'title', dur: 5, where: 'title', text: () => 'Operation Nightfall.' },
 ]
 
-export const STORY_LENGTH = SHOTS.reduce((a, s) => a + s.dur, 0)
+/** Each mission's film; missions without one get Nightfall's. */
+const FILMS: Record<string, Shot[]> = { nightfall: SHOTS, 'low-water': LOW_WATER_SHOTS }
+
+/** The film for the loaded mission. */
+export const shots = () => FILMS[useGameStore.getState().session?.def.id ?? ''] ?? SHOTS
+export const storyLength = () => shots().reduce((a, s) => a + s.dur, 0)
 
 /** Film clock (s), advanced by the overlay. `freeze` holds it at a time (screenshots / debugging). */
 export const story: { t: number; freeze?: number } = { t: 0 }
@@ -50,7 +68,8 @@ export const story: { t: number; freeze?: number } = { t: 0 }
 export const storyRender: { scene: Scene | null } = { scene: null }
 
 export function shotAt(t: number) {
+  const list = shots()
   let i = 0, lt = t
-  while (i < SHOTS.length - 1 && lt >= SHOTS[i].dur) lt -= SHOTS[i++].dur
-  return { i, lt, shot: SHOTS[i] }
+  while (i < list.length - 1 && lt >= list[i].dur) lt -= list[i++].dur
+  return { i, lt, shot: list[i] }
 }

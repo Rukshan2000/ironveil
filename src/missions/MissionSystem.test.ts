@@ -43,4 +43,16 @@ describe('MissionSystem', () => {
     expect(m.state).toBe('FAILED')
     expect(m.over).toBe(true)
   })
+
+  it('fails on a scripted failure, and only once the mission is still running', () => {
+    const m = new MissionSystem()
+    m.deploy()
+    m.update(11, ctx())
+    m.fail()
+    expect(m.state).toBe('FAILED')
+    const done = new MissionSystem()
+    done.succeed()
+    done.fail()
+    expect(done.state).toBe('SUCCESS')
+  })
 })

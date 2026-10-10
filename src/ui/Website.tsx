@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { BUDDY_NAME } from '../ai/BuddyBot'
-import { startGame } from '../app/actions'
+import { startMission } from '../app/actions'
+import { unlocked } from '../missions/registry'
 import { EVA_CREDIT } from '../game/BriefingRoom'
 import { useGameStore } from '../state/gameStore'
 import { controls } from './Screens'
@@ -114,8 +115,9 @@ export function Website() {
   const go = (id: string) => page.current?.querySelector(`#${id}`)?.scrollIntoView({ behavior: 'smooth' })
   const start = (e: React.MouseEvent) => {
     e.stopPropagation()
-    void startGame()
+    void startMission('nightfall')
   }
+  const lowWaterOpen = unlocked('low-water')
   const menu = (e: React.MouseEvent) => {
     e.stopPropagation()
     useGameStore.getState().setPhase('menu')
@@ -174,6 +176,30 @@ export function Website() {
                 <li key={t} className="flex gap-4"><span className="text-2xl font-bold text-warn">{i + 1}</span><span className="pt-1 text-hud/85">{t}</span></li>
               ))}
             </ol>
+          </div>
+        </div>
+      </Section>
+
+      <Section id="next" eyebrow="MISSION 02 · OPERATION LOW WATER" title="DAWN was never an attack">
+        <div className="grid gap-10 md:grid-cols-2">
+          <div className="space-y-5 text-[17px] leading-relaxed text-hud/85">
+            <p>The stolen orders decode at last. At first light Drask's engineers open every sluice of the <b className="text-[#ecebe2]">Tessaly Dam</b>. The flood takes the valley's river line, and when the water drops his tanks cross the empty riverbed.</p>
+            <p>And somebody told his gunships where your helicopter would land. This time there is no flight plan: Wren goes in <b className="text-warn">up the river</b>, and only Canopy knows the route.</p>
+          </div>
+          <div className="border border-white/10 bg-white/[0.02] p-6">
+            <div className="hud-label">Mission orders</div>
+            <ol className="mt-4 space-y-4">
+              {['Get past the fence line — river, west bank or the road gate', 'Lock the sluice program in the control house', 'Kill the backup generator before they force the gates', 'Hold the west-bank jetty for the boat, then run downriver'].map((t, i) => (
+                <li key={t} className="flex gap-4"><span className="text-2xl font-bold text-warn">{i + 1}</span><span className="pt-1 text-hud/85">{t}</span></li>
+              ))}
+            </ol>
+            <button
+              disabled={!lowWaterOpen}
+              onClick={(e) => { e.stopPropagation(); void startMission('low-water') }}
+              className={`mt-6 ${lowWaterOpen ? primary : 'cursor-not-allowed border border-hud/15 px-8 py-3 text-sm tracking-[0.3em] text-hud-dim'}`}
+            >
+              {lowWaterOpen ? 'PLAY MISSION 02' : 'LOCKED — COMPLETE NIGHTFALL'}
+            </button>
           </div>
         </div>
       </Section>

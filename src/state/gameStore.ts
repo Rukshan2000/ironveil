@@ -143,6 +143,8 @@ interface GameStore {
   lastDamage: number
   lastHitKill: boolean
   timeOfDay: TimeOfDay
+  /** Mission the next load builds (missions/registry). */
+  missionId: string
   coopStatus: CoopStatus
   coopCode: string
   coopError: string
@@ -177,6 +179,7 @@ export const useGameStore = create<GameStore>((set) => ({
   lastDamage: 0,
   lastHitKill: false,
   timeOfDay: 'dusk',
+  missionId: 'nightfall',
   coopStatus: 'off',
   coopCode: '',
   coopError: '',

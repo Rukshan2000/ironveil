@@ -3,10 +3,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AdditiveBlending, CatmullRomCurve3, Group, MathUtils, Vector3, type PerspectiveCamera, type Scene } from 'three'
 import { deploy } from '../app/actions'
 import { audio, type LoopHandle } from '../audio/AudioSystem'
+import { BoatModel } from '../extraction/BoatModel'
+import { BOAT_DECK } from '../extraction/ExtractionSystem'
 import { HeliModel } from '../extraction/HelicopterView'
 import { useGameStore } from '../state/gameStore'
 import { bindingLabel } from '../state/settings'
-import { briefingRoom, EVA_CREDIT, EVA_LINES, OFFICE_LENGTH } from './BriefingRoom'
+import { LOW_WATER_PLAN } from '../missions/lowWaterStory'
+import { briefingRoom, EVA_CREDIT } from './BriefingRoom'
 import type { GameSession } from './GameSession'
 
 /**
@@ -16,36 +19,49 @@ import type { GameSession } from './GameSession'
  */
 /** The flyover part; it plays after EVA's briefing in the office. */
 const FLY_LENGTH = 54
-export const INTRO_LENGTH = OFFICE_LENGTH + FLY_LENGTH
-const intro = { t: 0 }
-/** Space / skip: from the briefing jump to the flyover, from the flyover deploy. */
-function skip() {
-  if (intro.t < OFFICE_LENGTH - 0.5) intro.t = OFFICE_LENGTH - 0.5
-  else deploy()
-}
 
 /** Mission plan shots: where the camera looks, how it frames it, and what the player has to do there. */
 const PLAN_START = 12
 const PLAN_SHOT = 6
-const STEPS: { at: [number, number]; r: number; h: number; a: number; title: string; text: () => string; optional?: boolean }[] = [
+export interface PlanStep { at: [number, number]; r: number; h: number; a: number; title: string; text: () => string; optional?: boolean }
+/** A mission's flyover: opening title, the line under it, CANOPY's first call and the plan steps (five, to fit the timing). */
+export interface Plan { title: string; tagline: string; radio: string; steps: PlanStep[] }
+const NIGHTFALL_STEPS: PlanStep[] = [
   { at: [0, 18], r: 85, h: 48, a: -0.4, title: 'GET INSIDE THE WIRE', text: () => 'Three ways in: the drainage ditch on the west side, the utility tunnel under the east fence, or the main gate — fastest, and most watched.' },
   { at: [46, -6], r: 30, h: 20, a: 0.6, optional: true, title: 'TAKE THE KEYCARD', text: () => 'The officer patrolling the warehouse office carries the card for the security compound gates. Without it you will have to hack the lock.' },
   { at: [44, -50], r: 32, h: 22, a: 1.0, title: 'STEAL THE ORDERS', text: () => `The comms terminal is in the walled security compound, north-east. Hold ${bindingLabel('interact')} on it for ten seconds to copy the traffic logs.` },
   { at: [62, -46], r: 26, h: 18, a: 1.9, title: 'CUT THE UPLINK', text: () => 'The uplink transformer is at the power station on the east fence. Sabotage it and the station goes deaf — they cannot report the theft.' },
   { at: [-48, -54], r: 30, h: 20, a: -2.3, title: 'EXTRACT', text: () => 'With the uplink down a helicopter comes to the north-west landing pad. Get there and hold it until it lands.' },
 ]
-const PLAN_END = PLAN_START + STEPS.length * PLAN_SHOT
+const NIGHTFALL_PLAN: Plan = {
+  title: 'HALVARD RIDGE SIGNALS STATION',
+  tagline: 'One operative. No support until extraction.',
+  radio: "CANOPY: WREN, you're on the ground. Step one — get inside the wire. Your objective is always top left.",
+  steps: NIGHTFALL_STEPS,
+}
+const PLANS: Record<string, Plan> = { nightfall: NIGHTFALL_PLAN, 'low-water': LOW_WATER_PLAN }
+
+/** Intro clock and the loaded mission's plan / briefing length (set when the intro starts). */
+const intro = { t: 0, office: 56, plan: NIGHTFALL_PLAN }
+const introLength = () => intro.office + FLY_LENGTH
+/** Space / skip: from the briefing jump to the flyover, from the flyover deploy. */
+function skip() {
+  if (intro.t < intro.office - 0.5) intro.t = intro.office - 0.5
+  else deploy()
+}
+
+const PLAN_END = PLAN_START + NIGHTFALL_STEPS.length * PLAN_SHOT
 const LAND = PLAN_END // camera on the ground watching the helo come in
 const SETTLE = LAND + 7 // camera eases into the player's eyes
 
 type Caption = { from: number; to: number; text: string; kind?: 'title' | 'radio' }
-const CAPTIONS: Caption[] = [
-  { from: 0.8, to: 4.4, text: 'HALVARD RIDGE SIGNALS STATION', kind: 'title' },
-  { from: LAND + 0.3, to: LAND + 3.3, text: 'One operative. No support until extraction.' },
+const captions = (p: Plan): Caption[] => [
+  { from: 0.8, to: 4.4, text: p.title, kind: 'title' },
+  { from: LAND + 0.3, to: LAND + 3.3, text: p.tagline },
   { from: LAND + 3.5, to: LAND + 6.5, text: 'Call sign: WREN.', kind: 'title' },
-  { from: SETTLE + 0.4, to: FLY_LENGTH - 0.4, text: "CANOPY: WREN, you're on the ground. Step one — get inside the wire. Your objective is always top left.", kind: 'radio' },
+  { from: SETTLE + 0.4, to: FLY_LENGTH - 0.4, text: p.radio, kind: 'radio' },
 ]
-const CUTS = [PLAN_START, ...STEPS.map((_, i) => PLAN_START + (i + 1) * PLAN_SHOT)]
+const CUTS = [PLAN_START, ...NIGHTFALL_STEPS.map((_, i) => PLAN_START + (i + 1) * PLAN_SHOT)]
 const stepAt = (t: number) => (t >= PLAN_START && t < PLAN_END ? Math.floor((t - PLAN_START) / PLAN_SHOT) : -1)
 const ease = (x: number) => MathUtils.smoothstep(x, 0, 1)
 const look = new Vector3()
@@ -61,6 +77,20 @@ export function IntroCinematic({ session, vm }: { session: GameSession; vm: { sc
   const shot = useMemo(() => {
     const at = (x: number, z: number, up: number) => new Vector3(x, session.terrain.height(x, z) + up, z)
     const eye = session.player.eye(new Vector3())
+    const fwd = new Vector3(-Math.sin(session.player.yaw), 0, -Math.cos(session.player.yaw))
+    const river = session.def.ride === 'boat' ? session.river : null
+    if (river) {
+      // boat: up the river from the bottom of the valley, nose in at the bank by the player, then back downstream
+      const u0 = river.nearest(eye.x, eye.z)
+      const lz = river.at(u0).setY(river.y + BOAT_DECK)
+      const keys: [number, number][] = [[0, u0 + 0.5], [LAND + 1, u0 + 0.08], [SETTLE - 1.5, u0 + 0.01], [SETTLE, u0], [SETTLE + 2.5, u0], [FLY_LENGTH, u0 + 0.15]]
+      const path = (t: number, out: Vector3) => {
+        const i = Math.max(0, keys.findIndex((k) => k[0] > t) - 1)
+        const [t0, a] = keys[i], [t1, b] = keys[Math.min(i + 1, keys.length - 1)]
+        return river.at(a + (b - a) * (t1 > t0 ? Math.min(1, (t - t0) / (t1 - t0)) : 0), out).setY(river.y + BOAT_DECK)
+      }
+      return { at, eye, lz, path, fwd, boat: true }
+    }
     const lz = at(eye.x + 7, eye.z + 6, 0)
     // helo path: in from the west, low over the ridge, flare and land behind the player, then lift off north
     const keys: [number, Vector3][] = [
@@ -78,8 +108,8 @@ export function IntroCinematic({ session, vm }: { session: GameSession; vm: { sc
       const [t0] = keys[i], [t1] = keys[Math.min(i + 1, keys.length - 1)]
       return Math.min(1, (i + (t1 > t0 ? (t - t0) / (t1 - t0) : 0)) / (keys.length - 1))
     }
-    const fwd = new Vector3(-Math.sin(session.player.yaw), 0, -Math.cos(session.player.yaw))
-    return { at, eye, lz, curve, u, fwd }
+    const path = (t: number, out: Vector3) => curve.getPoint(u(t), out)
+    return { at, eye, lz, path, fwd, boat: false }
   }, [session])
 
   // leaving the intro (skip or finished) cleans up; the vm scene holds the first-person weapon
@@ -87,7 +117,9 @@ export function IntroCinematic({ session, vm }: { session: GameSession; vm: { sc
   useEffect(() => {
     if (phase !== 'intro') return
     intro.t = 0
-    briefingRoom.start(session.layout)
+    briefingRoom.start(session.layout, session.def)
+    intro.office = briefingRoom.length
+    intro.plan = PLANS[session.def.id] ?? NIGHTFALL_PLAN
     audio.setBedLevel(0.15) // indoors for the briefing
     return () => {
       briefingRoom.stop()
@@ -103,10 +135,10 @@ export function IntroCinematic({ session, vm }: { session: GameSession; vm: { sc
     g.visible = useGameStore.getState().phase === 'intro' // not the hook value: it lags a frame behind deploy()
     if (!g.visible) return
     vm.scene.visible = false
-    const total = (intro.t = Math.min(INTRO_LENGTH, intro.t + Math.min(delta, 0.05)))
-    if (total >= INTRO_LENGTH) return deploy()
+    const total = (intro.t = Math.min(introLength(), intro.t + Math.min(delta, 0.05)))
+    if (total >= introLength()) return deploy()
     // part one: EVA's briefing in the office (its own scene, swapped in by the render pipeline)
-    if (total < OFFICE_LENGTH) {
+    if (total < intro.office) {
       g.visible = false
       briefingRoom.update(total, camera as PerspectiveCamera)
       return
@@ -114,20 +146,19 @@ export function IntroCinematic({ session, vm }: { session: GameSession; vm: { sc
     if (briefingRoom.active) {
       briefingRoom.stop()
       audio.setBedLevel(1)
-      rotor.current = audio.loop('rotor', shot.lz, 1.4)
-      rotor.current?.set('rate', 0.95)
+      rotor.current = audio.loop(shot.boat ? 'engine' : 'rotor', shot.lz, shot.boat ? 1.1 : 1.4)
+      if (!shot.boat) rotor.current?.set('rate', 0.95)
     }
-    const t = total - OFFICE_LENGTH
+    const t = total - intro.office
 
-    // helicopter: follow the path, nose into the direction of travel, lean forward with speed
-    const u = shot.u(t)
-    shot.curve.getPoint(u, g.position)
-    const speed = shot.curve.getPoint(shot.u(t + 0.1), tmp).sub(g.position).length() * 10
+    // helicopter / boat: follow the path, nose into the direction of travel, lean forward with speed
+    shot.path(t, g.position)
+    const speed = shot.path(t + 0.1, tmp).sub(g.position).length() * 10
     if (speed > 1) {
       const turn = MathUtils.euclideanModulo(Math.atan2(-tmp.x, -tmp.z) - yaw.current + Math.PI, Math.PI * 2) - Math.PI
       yaw.current += turn * Math.min(1, delta * 2)
     }
-    g.rotation.set(-Math.min(0.25, speed * 0.012), yaw.current, 0, 'YXZ')
+    g.rotation.set(shot.boat ? Math.min(0.08, speed * 0.008) : -Math.min(0.25, speed * 0.012), yaw.current, 0, 'YXZ')
     rotor.current?.move(g.position)
 
     // camera
@@ -141,7 +172,7 @@ export function IntroCinematic({ session, vm }: { session: GameSession; vm: { sc
       look.copy(h).add(tmp.set(6, 0, 0))
     } else if (step >= 0) {
       // mission plan: slow orbit around each task's location, a beacon standing on the spot
-      const s = STEPS[step]
+      const s = intro.plan.steps[step]
       const k = (t - PLAN_START - step * PLAN_SHOT) / PLAN_SHOT
       const a = s.a + k * 0.45, r = s.r * (1 - k * 0.12)
       const [x, z] = s.at
@@ -169,7 +200,7 @@ export function IntroCinematic({ session, vm }: { session: GameSession; vm: { sc
 
   return (
     <>
-      <group ref={heli} visible={false}><HeliModel /></group>
+      <group ref={heli} visible={false}>{session.def.ride === 'boat' ? <BoatModel /> : <HeliModel />}</group>
       {/* objective beacon: a tall light column and a pulsing ground ring */}
       <group ref={beacon} visible={false}>
         <mesh position={[0, 30, 0]}>
@@ -201,17 +232,17 @@ export function IntroOverlay() {
     }
   }, [])
 
-  if (total < OFFICE_LENGTH) return <OfficeOverlay t={total} />
-  const t = total - OFFICE_LENGTH
+  if (total < intro.office) return <OfficeOverlay t={total} />
+  const t = total - intro.office
   const black = Math.max(1 - t / 0.8, ...CUTS.map((c) => 1 - Math.abs(t - c) / 0.35), 0)
   const bars = 1 - ease((t - (SETTLE + 2.5)) / 2)
-  const cap = CAPTIONS.find((c) => t >= c.from && t <= c.to)
+  const cap = captions(intro.plan).find((c) => t >= c.from && t <= c.to)
   const capAlpha = cap ? Math.min(1, (t - cap.from) / 0.4, (cap.to - t) / 0.4) : 0
   const step = stepAt(t)
-  const s = STEPS[step]
+  const s = intro.plan.steps[step]
   const stepT = t - PLAN_START - step * PLAN_SHOT
   const stepAlpha = s ? Math.min(1, (stepT - 0.3) / 0.4, (PLAN_SHOT - 0.3 - stepT) / 0.4) : 0
-  const required = STEPS.filter((x) => !x.optional)
+  const required = intro.plan.steps.filter((x) => !x.optional)
 
   return (
     <div className="pointer-events-none fixed inset-0 select-none">
@@ -249,8 +280,8 @@ export function IntroOverlay() {
 
 /** Briefing half of the overlay: letterbox, EVA's subtitles, fade in/out and a skip prompt. */
 function OfficeOverlay({ t }: { t: number }) {
-  const black = Math.max(1 - t / 1.4, 1 - (OFFICE_LENGTH - t) / 0.6, 0)
-  const line = EVA_LINES.find((l) => t >= l.from && t <= l.to)
+  const black = Math.max(1 - t / 1.4, 1 - (intro.office - t) / 0.6, 0)
+  const line = briefingRoom.brief.lines.find((l) => t >= l.from && t <= l.to)
   const alpha = line ? Math.min(1, (t - line.from) / 0.3, (line.to - t) / 0.3) : 0
   return (
     <div className="pointer-events-none fixed inset-0 select-none">

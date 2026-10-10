@@ -42,10 +42,13 @@ export function generateVegetation(layout: LevelLayout, terrain: Terrain): Veget
       const x = gx + (r() - 0.5) * 6, z = gz + (r() - 0.5) * 6
       const d = rectDist(x, z, layout.flatArea)
       if (d < 10 || nearRoad(x, z, 9)) continue
+      if (Math.hypot(x - layout.playerStart[0], z - layout.playerStart[2]) < 9) continue // a clear spot to land on
       const forest = fbm(x * 0.018 + 40, z * 0.018 - 12, 3) + Math.min(0.25, d / 300)
       if (forest < 0.56) continue
       const y = terrain.height(x, z)
       if (y < -0.6) continue // ditch bed
+      const pool = layout.water?.reservoir
+      if (pool && z < pool.z && y < pool.y + 0.5) continue // drowned by the reservoir
       const scale = 0.75 + r() * 0.65
       trees.push({ x, y, z, scale, rot: r() * Math.PI * 2 })
       colliders.push({ p: [x, y + 3, z], s: [0.45 * scale, 6, 0.45 * scale], mat: 'invisible', shape: 'cyl' })
