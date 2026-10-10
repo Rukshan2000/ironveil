@@ -101,9 +101,12 @@ export class Physics {
     return { body, collider }
   }
 
+  /** Walking ignores the other player's capsule (AI squadmate or co-op friend): it only exists to be shot and seen. */
+  private readonly walkable = (c: RAPIER.Collider) => this.tags.get(c.handle)?.kind !== 'peer'
+
   /** Slides a character by `delta`, resolving collisions. Mutates `delta` to the allowed movement; returns grounded. */
   moveCharacter(c: Character, delta: Vector3): boolean {
-    this.controller.computeColliderMovement(c.collider, delta, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS)
+    this.controller.computeColliderMovement(c.collider, delta, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.walkable)
     const m = this.controller.computedMovement()
     delta.set(m.x, m.y, m.z)
     const t = c.body.translation()
@@ -157,7 +160,7 @@ export class Physics {
       return false
     }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, exclude, undefined, (c) => {
       const k = this.tags.get(c.handle)?.kind
-      return k !== 'player' && k !== 'guard' && k !== 'camera'
+      return k !== 'player' && k !== 'guard' && k !== 'camera' && k !== 'peer'
     })
     return hit
   }
@@ -193,7 +196,7 @@ export class Physics {
       return true
     }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, c.collider, undefined, (o) => {
       const k = this.tags.get(o.handle)?.kind
-      return k !== 'player' && k !== 'guard' && k !== 'camera' && k !== 'terrain'
+      return k !== 'player' && k !== 'guard' && k !== 'camera' && k !== 'terrain' && k !== 'peer'
     })
     if (out.lengthSq() > 0) c.body.setTranslation({ x: t.x + out.x, y: t.y + out.y, z: t.z + out.z }, true)
     return out
