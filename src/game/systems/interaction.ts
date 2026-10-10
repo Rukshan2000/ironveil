@@ -9,6 +9,9 @@ import { bindingLabel } from '../../state/settings'
 import { input } from '../input'
 import type { GameSession } from '../GameSession'
 
+/** Seconds of hold-E to loop the camera feeds. */
+const CAMERA_HACK = 6
+
 const REACH = 2.1
 const eye = new Vector3()
 const fwd = new Vector3()
@@ -172,6 +175,19 @@ export function updateInteraction(s: GameSession, dt: number) {
         if (msg) s.notify(msg, 'warn')
       },
     }, REACH + 0.3, owns)
+  }
+
+  // camera console: loop every feed
+  const desk = s.layout.cameraConsole
+  if (desk && !security.camerasLooped) {
+    const at = new Vector3(...desk)
+    consider(at, {
+      text: hold('Loop Camera Feeds — blinds every camera'), hold: CAMERA_HACK, progress: () => security.consoleProgress,
+      use: (step) => {
+        workOn(s, at, false, step)
+        security.hackCameraConsole(step, CAMERA_HACK)
+      },
+    })
   }
 
   for (const p of security.panels) {

@@ -15,6 +15,7 @@ export const LOW_WATER: MissionDef = {
     'This time there is no flight plan. WREN and the partner go in up the river. CANOPY has the only copy of the route.',
   intel: [
     'Fourteen guards on site. Reinforcements by security level as before: +2, +3, +4 by truck up the valley road, then +5 from the control house.',
+    'Cameras on the road gate, the control house, the spillway and the jetty. Outside restricted areas a camera only reports you and sends a patrol; at the control house it sounds the siren. The camera desk in the road-gate hut loops every feed (hold 6 s).',
     'Two marksmen on the dam crest work the searchlights. Kill the operator and the light dies with him. The river channel is waist deep: slow, but low.',
     'The sluice program runs on the gate controller in the control house at the foot of the dam (east side). Hold to overwrite it (10 s).',
     'A backup generator in the shed east of the switchyard can force the gates by hand. Sabotage it after the program is locked.',

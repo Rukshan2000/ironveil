@@ -16,7 +16,7 @@ function SecurityCamera({ cam, session }: { cam: CameraState; session: GameSessi
     const h = head.current!
     h.rotation.set(cam.dead ? -0.9 : cam.pitch, cam.yaw, cam.dead ? 0.4 : 0, 'YXZ')
     const blink = cam.seeing ? Math.sin(session.time * 18) > 0 : Math.sin(session.time * 2) > 0.85
-    led.current!.emissiveIntensity = cam.dead ? 0 : cam.detection >= 1 || session.security.alarmActive ? 5 : blink ? 4 : 0.3
+    led.current!.emissiveIntensity = cam.dead || session.security.camerasLooped ? 0 : cam.detection >= 1 || session.security.alarmActive ? 5 : blink ? 4 : 0.3
   })
   const [x, y, z] = cam.def.position
   return (

@@ -234,6 +234,8 @@ export interface LevelLayout {
    * dips below it; `river` is its course ([x, z], upstream first) for boats; `reservoir` floods everything north of `z`.
    */
   water?: { y: number; river: [number, number][]; reservoir?: { y: number; z: number } }
+  /** Security desk where every camera feed can be looped (hold E), usually in the gate post: [x, y, z]. */
+  cameraConsole?: Vector3Tuple
   /** Climbable ladders: stand at `bottom` (or on `top`) and use them. */
   ladders?: LadderDef[]
   /** Health packs [x, z]; each sits on the floor/table there and restores health once. */

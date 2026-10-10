@@ -107,6 +107,12 @@ export function validateLevel(layout: LevelLayout, mission: MissionDef, nav = ne
     add(o.id, tag, r.ok ? 'ok' : 'fail', r.why, [pos[0], pos[2]])
   }
 
+  if (layout.cameraConsole) {
+    const [x, , z] = layout.cameraConsole
+    const r = reach(x, z)
+    add('camera-console', 'Camera console', r.ok ? 'ok' : 'fail', r.why, [x, z])
+  }
+
   // doors: must have a way to open, and ground on both sides
   for (const d of layout.doors) {
     const name = `Door: ${d.label ?? d.id}`

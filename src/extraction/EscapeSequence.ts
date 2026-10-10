@@ -6,6 +6,7 @@ import { settings } from '../state/settings'
 import { clamp } from '../utils/math'
 import { AR_K7 } from '../weapons/definitions'
 import { BOAT_DECK } from './ExtractionSystem'
+import { boatWake } from './wake'
 
 /**
  * The finale after extraction: the helicopter lifts off with Wren on the right-hand door gun and Kestrel (or the
@@ -140,9 +141,11 @@ export class EscapeSequence {
       return
     }
     const speed = BOAT_SPEED * clamp(this.t / LIFT, 0.15, 1) * (this.phase === 'home' || this.phase === 'escaped' ? 1.6 : 1)
+    const was = this.boat!.u
     this.boat!.u = Math.min(0.995, this.boat!.u + (speed * dt) / r.length)
     r.at(this.boat!.u, x.heliPos).y += BOAT_DECK + Math.sin(this.t * 2.2) * 0.06
     x.heliYaw = r.yaw(this.boat!.u, 1)
+    boatWake(this.s.effects, x.heliPos, x.heliYaw, ((this.boat!.u - was) * r.length) / Math.max(dt, 1e-3))
   }
 
   update(dt: number) {
@@ -290,6 +293,7 @@ export class EscapeSequence {
     const before = g.pos.clone()
     g.pos.lerp(w, 1 - Math.exp(-0.7 * dt))
     g.fall.subVectors(g.pos, before).divideScalar(Math.max(dt, 1e-3)) // velocity, kept for when it falls
+    if (this.boat) boatWake(s.effects, g.pos, Math.atan2(-g.fall.x, -g.fall.z), Math.hypot(g.fall.x, g.fall.z), 9)
     v.subVectors(heli, g.pos)
     g.yaw = Math.atan2(-v.x, -v.z)
 

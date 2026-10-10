@@ -55,6 +55,7 @@ const perimeter: BoxDef[] = [
   { p: [34.6, 1.8, FZ2], s: [0.7, 3.6, 0.7], mat: 'concrete' },
   { p: [30, 1.05, FZ2 - 0.6], s: [0.1, 8.4, 0.1], mat: 'paintedMetal', shape: 'cyl', rz: Math.PI / 2, color: 0xc8b030, collide: false },
   ...bld(building(38.5, 39.5, 3.4, 3.4, 2.7, { doors: { w: [0] }, windows: { s: [0], n: [0] }, color: 0x8a8a74 })), // gate hut
+  { p: [38.5, 0.4, 38.45], s: [1.6, 0.8, 0.6], mat: 'metal', color: 0x3a3f44 }, // camera desk
   ...sandbags(22, 40, 0, 3.6), ...jersey(28, 48, 0.1), ...jersey(32, 56, -0.1),
   ...barrel(41, 42, 0x4a3a28), // burn barrel
 ]
@@ -237,6 +238,7 @@ export const damLayout: LevelLayout = {
     { kind: 'workstation', position: [40, 0.9, -45], yaw: 0, id: 'gate-controller', title: 'SLUICE CONTROL // GATES 1-4' },
     { kind: 'workstation', position: [38.6, 0.9, -45], yaw: 0, title: 'RESERVOIR LEVEL' },
     { kind: 'workstation', position: [41.4, 0.9, -45], yaw: 0, title: 'SPILLWAY CAMS' },
+    { kind: 'workstation', position: [38.5, 0.8, 38.5], yaw: 0, title: 'CAMERA FEEDS' },
   ],
   pickups: [{ id: 'eng-ledger', position: [-36.6, 0.85, -24], label: 'engineer\'s radio ledger' }],
   doors: [
@@ -296,6 +298,7 @@ export const damLayout: LevelLayout = {
   channels: RIVER.slice(1).map(([x, z], i): [number, number, number, number, number, number] => [RIVER[i][0], RIVER[i][1], x, z, 13, 2.4]),
   water: { y: WATER_Y, river: RIVER, reservoir: { y: DAM.h - 2.5, z: DAM.z1 } },
   extraction: { position: [-20, 0, 30], radius: 5 },
+  cameraConsole: [38.5, 1, 39.1], // in the road-gate hut
   ladders: [towerLadder(62, 32, 6, Math.PI), towerLadder(14, -42, 6, 0)],
   healthPacks: [[48, 22], [40, -40], [58, -20], [-34, -24], [38.5, 39.5], [18, 4], [-22, 32]],
   bounds: [-100, -50, 100, 140],

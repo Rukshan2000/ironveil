@@ -1,6 +1,7 @@
 import { Vector3 } from 'three'
 import { audio, type LoopHandle } from '../audio/AudioSystem'
 import type { GameSession } from '../game/GameSession'
+import { boatWake } from './wake'
 
 /** Helicopter flight: approach from off-map, hover over the LZ, settle as the hold timer runs. */
 const APPROACH_FROM = new Vector3(-170, 70, -170)
@@ -61,8 +62,10 @@ export class ExtractionSystem {
       // boat: up the river from the bottom of the valley, easing in alongside the LZ
       const u0 = (this.boatU ??= s.river.nearest(lz.x, lz.z))
       const u = 1 + (u0 - 1) * ease
+      const before = this.heliPos.clone()
       s.river.at(u, this.heliPos).y += BOAT_DECK
       this.heliYaw = s.river.yaw(u, -1)
+      boatWake(s.effects, this.heliPos, this.heliYaw, this.since > dt ? before.distanceTo(this.heliPos) / Math.max(dt, 1e-3) : 0)
       this.rotor ??= audio.loop('engine', this.heliPos, 1.1)
       this.rotor?.move(this.heliPos)
     } else {

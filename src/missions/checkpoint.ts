@@ -32,6 +32,8 @@ export interface CheckpointData {
   panels: string[]
   doors: string[]
   commsDown: boolean
+  /** Camera feeds looped from the console (older saves: absent). */
+  camerasLooped?: boolean
   firedEvents: string[]
   stats: Stats
 }
@@ -63,6 +65,7 @@ export function saveCheckpoint(s: GameSession, label: string): boolean {
     panels: s.security.panels.filter((x) => x.disabled).map((x) => x.def.id),
     doors: s.security.doors.filter((d) => d.bypassed).map((d) => d.def.id),
     commsDown: s.alert.commsDown,
+    camerasLooped: s.security.camerasLooped,
     firedEvents: [...s.events.fired],
     stats: { ...s.stats },
   }
@@ -161,6 +164,7 @@ export function applyCheckpoint(s: GameSession, c: CheckpointData) {
   for (const p of s.security.panels) if (c.panels.includes(p.def.id)) p.disabled = true
   for (const d of s.security.doors) if (c.doors.includes(d.def.id)) d.bypassed = true
   s.alert.commsDown = c.commsDown
+  if (c.camerasLooped) s.security.camerasLooped = true
   for (const id of c.firedEvents) s.events.fired.add(id)
   // reinforcement squads that already died stay spent
   for (const q of s.reinforcements.squads) if (q.members.every((g) => c.dead.includes(g.data.id))) q.deployed = true

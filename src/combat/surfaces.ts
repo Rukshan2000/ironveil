@@ -3,7 +3,7 @@ import type { Surface } from '../world/types'
 export type DecalKind = 'concrete' | 'metal' | 'wood' | 'glass' | 'dirt'
 export type ParticleKind =
   | 'spark' | 'dust' | 'dirt' | 'chip' | 'splinter' | 'glass' | 'blood' | 'leaf'
-  | 'smoke' | 'muzzleSmoke' | 'flash' | 'fire' | 'mote' | 'explosion' | 'smokeScreen'
+  | 'smoke' | 'muzzleSmoke' | 'flash' | 'fire' | 'mote' | 'explosion' | 'smokeScreen' | 'spray' | 'foam'
 
 export interface SurfaceDef {
   /** Particle bursts on impact: [kind, count]. */

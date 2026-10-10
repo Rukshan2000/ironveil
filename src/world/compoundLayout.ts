@@ -67,6 +67,7 @@ const outside: BoxDef[] = [
 // ---- gate checkpoint (guard post) ---------------------------------------------------------------
 const checkpoint: BoxDef[] = [
   ...bld(building(-8.5, 38.5, 3.4, 3.4, 2.7, { doors: { e: [0] }, windows: { s: [0], n: [0], w: [0] }, color: 0x8a8a74 })),
+  { p: [-8.5, 0.4, 37.45], s: [1.6, 0.8, 0.6], mat: 'metal', color: 0x3a3f44 }, // camera desk
   ...sandbags(7.5, 39.5, 0, 3.6), ...sandbags(9.4, 37.8, Math.PI / 2, 3.0),
   ...barrel(-6.2, 36.2, 0x4a3a28), // burn barrel
   ...barrelGroup(11, 41, 3, 0x45502e),
@@ -402,6 +403,7 @@ export const compoundLayout: LevelLayout = {
   ],
   computers: [
     { kind: 'workstation', position: [-20, 0.8, -39], yaw: 0, id: 'intel-terminal', title: 'CMD-NET // INTEL ARCHIVE' },
+    { kind: 'workstation', position: [-8.5, 0.8, 37.5], yaw: 0, title: 'CAMERA FEEDS' },
     { kind: 'workstation', position: [38.8, 0.8, -54.2], yaw: 0, title: 'PERIMETER CAMS' },
     { kind: 'workstation', position: [40.2, 0.8, -54.2], yaw: 0, title: 'SECURITY GRID' },
     { kind: 'workstation', position: [41.6, 0.8, -54.2], yaw: 0, title: 'RADIO NET' },
@@ -491,6 +493,7 @@ export const compoundLayout: LevelLayout = {
     [73, -16, 112, -26, 7, 0], // track down to the utility tunnel
   ],
   extraction: { position: [-48, 0, -54], radius: 5 },
+  cameraConsole: [-8.5, 1, 38.1], // in the gate post
   // the two watchtowers' ladders (same placement as their tower() calls)
   ladders: [towerLadder(14, 62, 6, 0), towerLadder(54, -60, 7, Math.PI)],
   // health packs: barracks, warehouse, command building, motor pool, main gate, maintenance, security compound, landing pad

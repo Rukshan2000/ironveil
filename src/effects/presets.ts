@@ -34,5 +34,8 @@ export const PARTICLES: Record<ParticleKind, ParticlePreset> = {
   muzzleSmoke: { additive: false, speed: [0.3, 1.2], spread: 0.35, life: [0.5, 1.1], size: [0.05, 0.5], colors: [0xb0aca4], alpha: 0.22, gravity: -0.3, drag: 3, lift: 0.15 },
   explosion: { additive: true, speed: [2, 9], spread: 1.6, life: [0.12, 0.4], size: [1.4, 3.2], colors: [0xffb060, 0xff8a30, 0xffe0a0], alpha: 0.9, gravity: -1, drag: 4, lift: 1 },
   smokeScreen: { additive: false, speed: [0.6, 2.2], spread: 1.5, life: [6, 9], size: [1.8, 5.5], colors: [0x8a8884, 0x9a9792, 0x7c7a76], alpha: 0.6, gravity: -0.05, drag: 0.7, lift: 0.3 },
+  // boats: water thrown off the bow, and the churned wake left on the surface
+  spray: { additive: false, speed: [1.5, 4.5], spread: 0.45, life: [0.35, 0.8], size: [0.08, 0.4], colors: [0xe8f0f0, 0xc8d8dc], alpha: 0.55, gravity: 9.8, drag: 1.2, lift: 0 },
+  foam: { additive: false, speed: [0.1, 0.5], spread: 1.4, life: [1.6, 2.8], size: [0.35, 1.6], colors: [0xdfe8e6, 0xc9d6d4], alpha: 0.42, gravity: 0, drag: 2.5, lift: 0 },
   mote: { additive: false, speed: [0.02, 0.08], spread: 3, life: [4, 7], size: [0.012, 0.012], colors: [0xd8d0b8], alpha: 0.5, gravity: -0.01, drag: 0.1, lift: 0 },
 }

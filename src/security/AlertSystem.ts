@@ -103,11 +103,11 @@ export class AlertSystem {
       } else if (st === 'SEARCH') this.tracker.observe(2, t)
       else if (st === 'SUSPICIOUS' || st === 'INVESTIGATE') this.tracker.observe(1, t)
     }
-    if (s.security.cameraDetection > 0.35) this.tracker.observe(1, t)
+    if (s.security.cameraDetection > 0.6) this.tracker.observe(1, t)
 
     // detection record for the debrief
     if (fighting || s.security.alarmActive) this.detection = 'detected'
-    else if (this.detection === 'none' && (this.tracker.level >= 1 || s.security.cameraDetection > 0.35)) this.detection = 'suspicious'
+    else if (this.detection === 'none' && (this.tracker.level >= 1 || s.security.cameraDetection > 0.6)) this.detection = 'suspicious'
 
     this.tracker.alarm = s.security.alarmActive
     if (this.tracker.alarm) {

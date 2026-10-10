@@ -1,13 +1,19 @@
 import type RAPIER from '@dimforge/rapier3d-compat'
 import { Vector3 } from 'three'
-import { alertGuard } from '../ai/guardBrain'
+import { alertGuard, calmState, orderInvestigate } from '../ai/guardBrain'
 import { audio, type LoopHandle } from '../audio/AudioSystem'
 import { MATERIALS } from '../assets/materials'
 import type { GameSession } from '../game/GameSession'
 import type { AlarmPanelDef, CameraDef, DoorDef, SearchlightDef, ZoneDef } from '../world/types'
 
-/** Camera field of view (half-angles) and detection tuning. */
-const CAM = { halfFov: 0.48, halfPitch: 0.45, sweepSpeed: 0.32, detectRate: 1.4, decay: 0.3 }
+/**
+ * Camera field of view (half-angles) and detection tuning. `detectRate` is the fill per second at point-blank range,
+ * lit and standing (≈2 s); range, darkness and crouching slow it a lot. A camera only turns to follow once it has
+ * `noticeAt` of a detection, so slipping out of its view early works.
+ */
+const CAM = { halfFov: 0.48, halfPitch: 0.45, sweepSpeed: 0.32, detectRate: 0.48, decay: 0.5, noticeAt: 0.35, track: 0.6 }
+/** Seconds a camera that has called in a sighting waits before it can report again. */
+const CAM_REPORT_COOLDOWN = 15
 const BEAM = { halfAngle: 0.12, sweepSpeed: 0.22 }
 const ALARM_TIMEOUT = 60
 const PANEL_SABOTAGE = 2.2
@@ -59,6 +65,7 @@ export interface DoorState {
 
 const tmp = new Vector3()
 const dir = new Vector3()
+const camName = (c: CameraState) => c.def.id.replace('cam-', '').toUpperCase()
 
 /** SecuritySystem: cameras, searchlights, alarm panels, doors, restricted zones and the base alarm. */
 export class SecuritySystem {
@@ -75,6 +82,10 @@ export class SecuritySystem {
   cameraDetection = 0
   /** Full lockdown: doors flagged `lockdown` re-lock and reject keycards. */
   lockdownActive = false
+  /** The camera console was hacked: every feed shows a recorded loop (cameras stay up, see nothing). */
+  camerasLooped = false
+  /** Hold-E progress on the camera console, 0..1. */
+  consoleProgress = 0
   private quiet = 0
   private sirens: LoopHandle[] = []
 
@@ -117,6 +128,36 @@ export class SecuritySystem {
   searchlightExposure(guardId: string) {
     const l = this.searchlights.find((x) => x.def.operator === guardId)
     return l?.on && l.spotted ? 0.85 : 0
+  }
+
+  /** A camera operator calls in movement: the base turns suspicious and the two nearest calm guards go to look. */
+  private cameraReport(c: CameraState, at: Vector3) {
+    const s = this.s
+    c.detection = 0.5
+    s.alert.tracker.observe(1, s.time)
+    s.notify(`Camera ${camName(c)} spotted you — a patrol is coming to check`, 'warn')
+    s.radio.say('enemy', 'Control', `Camera ${camName(c)} has movement near ${s.areaName(at)}. Nearest patrol, check it out.`)
+    const near = s.guards
+      .filter((g) => g.active && g.data.state !== 'DEAD' && calmState(g.data.state) && !g.data.stationary)
+      .sort((a, b) => a.data.position.distanceToSquared(at) - b.data.position.distanceToSquared(at))
+    let sent = 0
+    for (const g of near) if (sent < 2 && orderInvestigate(g.data, at)) sent++
+  }
+
+  /** Hold-E on the camera console: when it completes every camera feed is looped (counts as disabling them). */
+  hackCameraConsole(step: number, duration: number) {
+    if (this.camerasLooped) return
+    this.consoleProgress = Math.min(1, this.consoleProgress + step / duration)
+    if (this.consoleProgress < 1) return
+    const s = this.s
+    this.camerasLooped = true
+    for (const c of this.cameras) {
+      c.detection = 0
+      c.seeing = false
+      if (!c.dead) s.objectives.handle({ type: 'destroyed', targetId: c.def.id })
+    }
+    s.notify('Camera feeds looped — every camera is blind', 'good')
+    s.radio.say('handler', 'CANOPY', 'Nice. Their monitors are showing an empty yard on repeat. Cameras are no longer a problem.')
   }
 
   damageCamera(id: string) {
@@ -270,7 +311,7 @@ export class SecuritySystem {
     // ---- cameras
     this.cameraDetection = 0
     for (const c of this.cameras) {
-      if (c.dead) continue
+      if (c.dead || this.camerasLooped) continue
       const cam = tmp.set(...c.def.position)
       dir.subVectors(playerTarget, cam)
       const dist = dir.length()
@@ -285,13 +326,16 @@ export class SecuritySystem {
       }
       c.seeing = sees
       if (sees) {
-        const light = 0.35 + s.environment.playerLight * 0.65
-        // anyone in a restricted zone is flagged faster
+        // shadows hide you well from a camera; anyone in a restricted zone is flagged faster
+        const light = 0.25 + s.environment.playerLight * 0.75
         const zone = this.zoneAt(p.feet) ? 1.3 : 1
-        c.detection = Math.min(1, c.detection + (1 - dist / c.def.range) * CAM.detectRate * light * zone * (p.crouching ? 0.7 : 1) * dt * 1.6)
-        // track the target
-        c.yaw += clampStep(wrap(toYaw - c.yaw), 1.2 * dt)
-        c.pitch += clampStep(toPitch - c.pitch, 1 * dt)
+        const reach = 1 - (dist / c.def.range) * 0.75
+        c.detection = Math.min(1, c.detection + reach * CAM.detectRate * light * zone * (p.crouching ? 0.6 : 1) * dt)
+        // only once it has noticed something does it turn to follow
+        if (c.detection > CAM.noticeAt) {
+          c.yaw += clampStep(wrap(toYaw - c.yaw), CAM.track * dt)
+          c.pitch += clampStep(toPitch - c.pitch, CAM.track * dt)
+        }
       } else {
         c.detection = Math.max(0, c.detection - CAM.decay * dt)
         c.phase += dt * CAM.sweepSpeed
@@ -301,8 +345,11 @@ export class SecuritySystem {
       }
       c.cooldown -= dt
       if (c.detection >= 1 && c.cooldown <= 0) {
-        c.cooldown = 10
-        this.triggerAlarm(`camera ${c.def.id.replace('cam-', '').toUpperCase()}`, playerTarget.clone())
+        c.cooldown = CAM_REPORT_COOLDOWN
+        // inside a restricted zone, or with the base already on alert, the operator hits the siren; elsewhere the
+        // sighting is called in and a patrol is sent to look
+        if (this.zoneAt(p.feet) || s.alert.level >= 2) this.triggerAlarm(`camera ${camName(c)}`, playerTarget.clone())
+        else this.cameraReport(c, playerTarget.clone())
       }
       this.cameraDetection = Math.max(this.cameraDetection, c.detection)
     }

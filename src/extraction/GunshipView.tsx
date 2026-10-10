@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import type { Group, MeshStandardMaterial } from 'three'
 import type { GameSession } from '../game/GameSession'
-import { BoatModel } from './BoatModel'
+import { BoatModel, useBoatMotion } from './BoatModel'
 
 /** The Varn pursuers of the escape: a fixed pool drawn from `session.escape.gunships` (attack helicopters, or patrol boats). */
 const POOL = 4
@@ -15,14 +15,15 @@ export function GunshipView({ session }: { session: GameSession }) {
 /** Boat missions: the pursuers are Varn patrol boats on the river. */
 function PatrolBoat({ session, index }: { session: GameSession; index: number }) {
   const g = useRef<Group>(null)
-  useFrame(() => {
+  const motion = useBoatMotion()
+  useFrame((_, dt) => {
     const ship = session.escape?.gunships[index]
     const root = g.current!
     root.visible = !!ship && ship.state !== 'gone'
     if (!ship || !root.visible) return
     root.position.copy(ship.pos)
-    // bow up under way, listing as it sinks
-    root.rotation.set(ship.state === 'falling' ? -0.25 : 0.06, ship.yaw, ship.state === 'falling' ? 0.35 : Math.sin(session.time * 2 + index) * 0.04, 'YXZ')
+    const [pitch, roll] = motion(ship.pos, ship.yaw, dt, ship.state === 'falling')
+    root.rotation.set(pitch, ship.yaw, roll, 'YXZ')
   })
   const hit = () => {
     const ship = session.escape?.gunships[index]
