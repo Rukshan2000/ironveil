@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { continueFromCheckpoint, playIntro, openBriefing, quitToMenu, requestLock, restartMission } from '../app/actions'
+import { continueFromCheckpoint, goHome, playIntro, openBriefing, quitToMenu, requestLock, restartMission } from '../app/actions'
 import { loadCheckpoint } from '../missions/checkpoint'
 import { NIGHTFALL } from '../missions/nightfall'
 import { ALERT_LABELS, type AlertLevel } from '../security/AlertSystem'
@@ -11,7 +11,7 @@ import { PRESETS, type TimeOfDay } from '../world/environment'
 import { TacticalMap } from './TacticalMap'
 
 /** Controls summary built from the live key bindings. */
-const controls = (): [string, string][] => [
+export const controls = (): [string, string][] => [
   [`${k('forward')} ${k('left')} ${k('back')} ${k('right')}`, 'Move'], [k('sprint'), 'Sprint / hold breath (scoped)'], [k('walk'), 'Slow walk (quiet)'],
   [k('crouch'), 'Crouch'], [k('prone'), 'Prone'], [k('jump'), 'Jump / vault / stand'], [`${k('leanLeft')} / ${k('leanRight')}`, 'Lean'],
   [`${k('fire')} / ${k('aim')}`, 'Fire / Aim (hold)'], ['Wheel (aimed)', 'Optic zoom 1×–8×'], [k('reload'), 'Reload'], [k('inspect'), 'Inspect weapon'],
@@ -114,6 +114,7 @@ export function MainMenu() {
             <Button onClick={continueFromCheckpoint}>CONTINUE — {checkpoint.label.split(' — ')[0].toUpperCase()}</Button>
           )}
           <Button onClick={() => useGameStore.setState({ settingsOpen: true })}>SETTINGS</Button>
+          <Button onClick={goHome}>← GAME SITE</Button>
         </div>
         <CoopPanel />
       </div>

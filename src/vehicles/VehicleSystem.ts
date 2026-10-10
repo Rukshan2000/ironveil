@@ -172,10 +172,17 @@ export class Vehicle {
   }
 }
 
+/** World position of a vehicle's rider spot. */
+export function seatAt(veh: Vehicle, which: 'driver' | 'passenger' = 'passenger') {
+  return new Vector3(...veh.def.ride![which]).applyQuaternion(veh.quaternion).add(veh.position)
+}
+
 /** VehicleSystem: spawns vehicles, handles enter/exit, driving input and the chase camera. */
 export class VehicleSystem {
   readonly vehicles: Vehicle[]
   driving: Vehicle | null = null
+  /** Co-op: the partner's vehicle we ride in as passenger (look around and shoot from the seat / truck bed). */
+  riding: Vehicle | null = null
   readonly drivers: VehicleAI[] = []
   private orbitYaw = 0
   private orbitPitch = -0.18
@@ -187,6 +194,32 @@ export class VehicleSystem {
   /** Vehicle within reach of the player's position, if any (not ones an AI is driving). */
   near(p: Vector3): Vehicle | null {
     return this.vehicles.find((veh) => !veh.autopilot && !veh.remote && veh.position.distanceTo(p) < 3.2 + (veh.def.model === 'truck' ? 1.5 : 0)) ?? null
+  }
+
+  /** Co-op: a vehicle the partner is driving that has a rider spot, within reach. */
+  nearRide(p: Vector3): Vehicle | null {
+    if (this.riding || this.driving) return null
+    return this.vehicles.find((veh) => veh.remote && veh.def.ride && veh.position.distanceTo(p) < 4.5) ?? null
+  }
+
+  board(veh: Vehicle) {
+    this.riding = veh
+    this.s.player.character.collider.setEnabled(false)
+    this.s.notify(`Riding — ${veh.def.ride!.seated ? 'passenger seat' : 'in the back'}. E to get off`, 'info')
+    audio.mech('switch')
+  }
+
+  /** Gets off a ride on the passenger side (no-op when not riding). */
+  leaveRide() {
+    const veh = this.riding
+    if (!veh) return
+    this.riding = null
+    const p = this.s.player
+    const at = new Vector3(2.2, 0, 0.5).applyQuaternion(veh.quaternion).add(veh.position)
+    at.y = Math.max(this.s.floorAt(at.x, at.z, at.y + 1), this.s.terrain.height(at.x, at.z)) + 0.05
+    p.teleport(at)
+    p.character.collider.setEnabled(true)
+    audio.mech('switch')
   }
 
   /** Has an AI drive vehicle `id` along a named layout route. Returns false if it can't (missing, or player has it). */
@@ -245,6 +278,11 @@ export class VehicleSystem {
   update(dt: number) {
     for (const ai of this.drivers) ai.update(dt)
     for (const veh of this.vehicles) veh.update(dt, veh === this.driving)
+    if (this.riding) {
+      // partner got out (or left): hop off; E gets off; otherwise keep the body on the rider spot
+      if (!this.riding.remote || input.pressed('interact')) this.leaveRide()
+      else this.s.player.teleport(seatAt(this.riding))
+    }
     if (this.driving) {
       const { dx, dy } = input.consumeMouse()
       this.orbitYaw = this.orbitYaw - dx * 0.003

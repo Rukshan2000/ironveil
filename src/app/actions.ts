@@ -28,9 +28,25 @@ export async function openBriefing() {
   useGameStore.getState().setPhase('briefing')
 }
 
-/** Briefing → 30 s insertion cinematic (see IntroCinematic), which then calls deploy(). */
+/** Website START GAME: load the mission, play the story film (StoryFilm), then the briefing. */
+export async function startGame() {
+  audio.unlock()
+  await load(useGameStore.getState().timeOfDay)
+  useGameStore.getState().setPhase('story')
+}
+
+/** Story film finished or skipped → the mission briefing. */
+export function endStory() {
+  useGameStore.getState().setPhase('briefing')
+}
+
+/** Briefing DEPLOY → the mission story: EVA's briefing and the flight in (IntroCinematic), which then calls deploy(). */
 export function playIntro() {
   useGameStore.getState().setPhase('intro')
+}
+
+export function goHome() {
+  useGameStore.getState().setPhase('home')
 }
 
 /** Briefing → insertion. Must run inside a click handler for pointer lock. */

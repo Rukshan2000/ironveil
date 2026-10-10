@@ -27,7 +27,7 @@ function basis(s: GameSession) {
 /** WeaponSystem: player input → weapon controllers, ballistics, recoil, effects, audio and noise. */
 export function updateWeapons(s: GameSession, dt: number) {
   const { player } = s
-  if (!player.active) return
+  if (!player.active || !player.alive) return
   const adsSpeed = settings().adsSpeed
   // binoculars up: weapon lowered, no switching/firing (the recon system owns the wheel and RMB)
   if (s.recon.active) {
@@ -76,8 +76,11 @@ export function updateWeapons(s: GameSession, dt: number) {
     for (let i = 0; i < s.weapons.length; i++) if (input.pressed(slots[s.weapons[i].def.slot - 1])) wanted = i
     if (wheel) wanted = (wanted + wheel + s.weapons.length) % s.weapons.length
     if (wanted !== (s.pendingWeapon ?? s.weaponIndex)) {
-      if (wanted === s.weaponIndex) s.pendingWeapon = null
-      else {
+      if (wanted === s.weaponIndex) {
+        // changed their mind mid-switch: bring the same gun back up instead of leaving it out of view
+        s.pendingWeapon = null
+        if (s.weapon.holsterTimer > 0) s.weapon.equip()
+      } else {
         if (s.pendingWeapon === null) {
           s.weapon.lower()
           audio.cloth(0.5)

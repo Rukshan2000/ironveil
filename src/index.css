@@ -28,3 +28,7 @@ body { font-family: var(--font-sans); color: var(--color-hud); user-select: none
 .tnum { font-variant-numeric: tabular-nums; }
 @keyframes hud-blink { 50% { opacity: 0.35 } }
 .blink { animation: hud-blink 1.2s steps(2, start) infinite; }
+/* landing site: radar sweep over Halvard Ridge */
+@keyframes site-sweep { to { transform: rotate(-360deg) } }
+.site-sweep { animation: site-sweep 6s linear infinite; transform-origin: 0 0; }
+@media (prefers-reduced-motion: reduce) { .site-sweep { animation: none } }

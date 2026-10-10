@@ -1,9 +1,12 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
-import { CylinderGeometry, Group } from 'three'
+import { CylinderGeometry, Group, Vector3 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { litMaterial } from '../assets/materials'
 import { getTextures } from '../assets/textures'
+import { TINT } from '../characters/GltfSoldier'
+import type { AnimState } from '../characters/types'
+import { useSoldierRig } from '../characters/useSoldierRig'
 import type { GameSession } from '../game/GameSession'
 import { TRUCK } from './definitions'
 import type { Vehicle } from './VehicleSystem'
@@ -122,7 +125,9 @@ function makeTruckAssets() {
 }
 
 /** Truck body (everything but the wheels). Local frame: -Z forward, wheel centres at y -0.15, ground ≈ y -0.7. */
-function TruckBody({ covered = true }: { covered?: boolean }) {
+function TruckBody({ covered = true, cargo = true }: { covered?: boolean; cargo?: boolean }) {
+  // the drivable open truck (no cargo) also has an open cab
+  const openCab = !covered && !cargo
   const m = (truckAssets ??= makeTruckAssets())
   return (
     <>
@@ -148,13 +153,22 @@ function TruckBody({ covered = true }: { covered?: boolean }) {
       ))}
 
       {/* cab: windscreen, side glass, mirrors, steps, door seams */}
-      <mesh material={m.body} geometry={m.cab} position={[0, 1.1, -1.8]} castShadow />
+      {openCab ? (<>
+        {/* open cab (drivable open truck): waist-high body, seats and wheel, no roof, so the driver shows */}
+        <mesh material={m.body} position={[0, 0.62, -1.8]} castShadow><boxGeometry args={[2.3, 1.0, 1.6]} /></mesh>
+        <mesh material={m.dark} position={[0, 1.13, -1.8]}><boxGeometry args={[2.0, 0.04, 1.3]} /></mesh>
+        <mesh material={m.dark} position={[0, 1.4, -1.25]}><boxGeometry args={[2.2, 0.55, 0.12]} /></mesh>
+        <mesh material={m.dark} position={[-0.5, 1.45, -2.25]} rotation={[1.1, 0, 0]}><torusGeometry args={[0.2, 0.02, 6, 18]} /></mesh>
+        {[-1.12, 1.12].map((x) => <mesh key={x} material={m.dark} position={[x, 1.55, -2.58]}><boxGeometry args={[0.05, 0.8, 0.05]} /></mesh>)}
+      </>) : (<>
+        <mesh material={m.body} geometry={m.cab} position={[0, 1.1, -1.8]} castShadow />
+        <mesh material={m.dark} position={[0, 2.12, -1.8]}><boxGeometry args={[0.7, 0.06, 0.7]} /></mesh>
+      </>)}
       <mesh material={m.glass} position={[0, 1.62, -2.6]} rotation={[-0.06, 0, 0]}><boxGeometry args={[2.0, 0.72, 0.03]} /></mesh>
       <mesh material={m.dark} position={[0, 1.62, -2.62]}><boxGeometry args={[0.05, 0.72, 0.03]} /></mesh>
-      <mesh material={m.dark} position={[0, 2.12, -1.8]}><boxGeometry args={[0.7, 0.06, 0.7]} /></mesh>
       {[-1, 1].map((x) => (
         <group key={x}>
-          <mesh material={m.glass} position={[x * 1.16, 1.6, -1.95]}><boxGeometry args={[0.03, 0.6, 0.85]} /></mesh>
+          {!openCab && <mesh material={m.glass} position={[x * 1.16, 1.6, -1.95]}><boxGeometry args={[0.03, 0.6, 0.85]} /></mesh>}
           <mesh material={m.dark} position={[x * 1.16, 1.1, -1.12]}><boxGeometry args={[0.02, 1.7, 0.03]} /></mesh>
           <mesh material={m.metal} position={[x * 1.17, 1.15, -1.3]}><boxGeometry args={[0.04, 0.04, 0.16]} /></mesh>
           <mesh material={m.metal} position={[x * 1.3, 1.65, -2.45]} rotation={[0, 0, x * 0.4]}><boxGeometry args={[0.3, 0.03, 0.03]} /></mesh>
@@ -188,7 +202,7 @@ function TruckBody({ covered = true }: { covered?: boolean }) {
       <mesh material={m.dark} position={[0, 1.7, 3.61]}><boxGeometry args={[2.2, 0.95, 0.02]} /></mesh>
       <mesh material={m.tarp} position={[0, 2.25, 3.62]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.12, 0.12, 2.3, 10]} /></mesh>
       {[-0.2, 1.35, 2.9].map((z) => <mesh key={z} material={m.dark} position={[0, 1.24, z]}><boxGeometry args={[2.47, 0.04, 0.05]} /></mesh>)}
-      </>) : (<>
+      </>) : cargo && (<>
         {/* open bed: lashed crates and a folded tarp */}
         {([[-0.5, 0.2, 0.9], [0.55, 0.4, 0.95], [-0.45, 1.3, 0.8], [0.4, 2.4, 1.1]] as const).map(([x, z, h], i) => (
           <mesh key={i} material={m.crate} position={[x, 0.62 + h / 2, z]} castShadow><boxGeometry args={[0.95, h, 0.95]} /></mesh>
@@ -223,7 +237,7 @@ function TruckView({ vehicle }: { vehicle: Vehicle }) {
   const def = vehicle.def
   return (
     <group ref={root}>
-      <TruckBody />
+      <TruckBody covered={!def.open} cargo={!def.open} />
       {def.wheels.map((w, i) => (
         <group key={i} ref={(g) => (wheels.current[i] = g)} position={w.at}>
           <group ref={(g) => (spins.current[i] = g)}><TruckWheel r={def.wheelRadius} /></group>
@@ -292,5 +306,33 @@ export function ParkedVehicles({ session }: { session: GameSession }) {
 }
 
 export function VehicleView({ session }: { session: GameSession }) {
-  return session.vehicles.vehicles.map((v) => (v.def.model === 'truck' ? <TruckView key={v.id} vehicle={v} /> : <JeepView key={v.id} vehicle={v} />))
+  return (
+    <>
+      {session.vehicles.vehicles.map((v) => (v.def.model === 'truck' ? <TruckView key={v.id} vehicle={v} /> : <JeepView key={v.id} vehicle={v} />))}
+      <DriverView session={session} />
+    </>
+  )
+}
+
+const DRIVER_LOOK = { tint: TINT.friend }
+const seat = new Vector3()
+
+/** The player's own soldier at the wheel while driving, so the chase camera shows who is driving. */
+function DriverView({ session }: { session: GameSession }) {
+  const rig = useSoldierRig(DRIVER_LOOK)
+  const root = useRef<Group>(null)
+  const anim = useMemo<AnimState>(() => ({
+    speed: 0, crouch: 1, aim: 0, sinceShot: 99, reload: -1, radio: false, turnRate: 0, lookYaw: 0, sinceHit: 99,
+    dead: false, sinceDeath: 0, deathDir: new Vector3(0, 0, 1), yaw: 0,
+  }), [])
+  useFrame((_, delta) => {
+    const veh = session.vehicles.driving
+    const g = root.current!
+    g.visible = !!veh?.def.ride
+    if (!veh?.def.ride) return
+    g.position.copy(seat.set(...veh.def.ride.driver).applyQuaternion(veh.quaternion).add(veh.position))
+    g.quaternion.copy(veh.quaternion)
+    rig.update(Math.min(delta, 0.05), anim)
+  })
+  return <group ref={root} visible={false}><primitive object={rig.root} /></group>
 }

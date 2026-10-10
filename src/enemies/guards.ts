@@ -23,6 +23,17 @@ export const GUARD_GUNS: Record<GuardKind, { def: WeaponDefinition; damage: numb
   sniper: { def: VK_8, damage: 42, spread: 0.18 },
   rusher: { def: P_11, damage: 6, spread: 1.2 },
 }
+/** Weapon grade by reinforcement tier (0 = garrison): later waves hit harder and shoot tighter. */
+const TIER_GUN = [{ damage: 1, spread: 1 }, { damage: 1, spread: 1 }, { damage: 1.1, spread: 0.95 }, { damage: 1.2, spread: 0.88 }, { damage: 1.35, spread: 0.8 }]
+/** Plate armour by tier: convoy troops and the lockdown team wear carriers. */
+const TIER_ARMOR = [0, 0, 0, 30, 60]
+
+/** The gun this guard fires: its kind's weapon, upgraded by tier (tier 3+ rushers swap the pistol for a carbine). */
+export function guardGun(g: GuardEntity) {
+  const base = GUARD_GUNS[g.data.kind], t = TIER_GUN[g.tier]
+  return { def: g.tier >= 3 && g.data.kind === 'rusher' ? AR_K7 : base.def, damage: base.damage * t.damage, spread: base.spread * t.spread }
+}
+
 const RADIO_RANGE = 45
 const SHOUT_RANGE = 14
 /** Radio range once the uplink is down. */
@@ -42,6 +53,8 @@ export interface GuardEntity {
   carries?: string
   squad?: string
   leader?: boolean
+  /** Reinforcement wave 1–4 (0 = garrison): uniform, armour and weapon grade. */
+  tier: number
   /** Throttled thinking: time since the brain last ran, and its last output (reused for movement in between). */
   thinkAcc: number
   lastOut: BrainOutput | null
@@ -90,9 +103,9 @@ export function createGuardEntity(physics: Physics, spawn: GuardSpawn, active = 
     data.state = 'IDLE'
   }
   return {
-    data, character, active, carries: spawn.carries, squad: spawn.squad, leader: spawn.leader, thinkAcc: Math.random() * 0.1, lastOut: null, heardBuf: null, vy: 0, vel: new Vector3(), stuckTime: 0, muzzleTime: -999, crouched: false,
+    data, character, active, carries: spawn.carries, squad: spawn.squad, leader: spawn.leader, tier: spawn.tier ?? 0, thinkAcc: Math.random() * 0.1, lastOut: null, heardBuf: null, vy: 0, vel: new Vector3(), stuckTime: 0, muzzleTime: -999, crouched: false,
     path: null, pathGoal: new Vector3(), pathTimer: 0, damaged: false, underFire: false, trackTime: 0, voiceCooldown: 0,
-    bodyTimer: Math.random(), intelTime: 0, stun: 0, armor: Math.max(KINDS[kind].armor, spawn.leader ? 40 : 0), evade: null, target: 'local', debug: { exposure: 0, los: false },
+    bodyTimer: Math.random(), intelTime: 0, stun: 0, armor: Math.max(KINDS[kind].armor, spawn.leader ? 40 : 0, TIER_ARMOR[spawn.tier ?? 0]), evade: null, target: 'local', debug: { exposure: 0, los: false },
     anim: { speed: 0, crouch: 0, aim: 0, sinceShot: 99, reload: -1, radio: false, turnRate: 0, lookYaw: 0, sinceHit: 99, dead: false, sinceDeath: 0, deathDir: new Vector3(0, 0, 1), yaw },
   }
 }
@@ -191,7 +204,7 @@ export function updateGuards(s: GameSession, dt: number) {
     // far guards think less often; movement keeps using the last decision in between
     g.thinkAcc += dt
     let out: BrainOutput
-    if (!g.lastOut || g.thinkAcc >= THINK_INTERVAL(Math.min(g.data.position.distanceTo(s.player.feet), s.coop.connected ? g.data.position.distanceTo(s.coop.other.feet) : Infinity))) {
+    if (!g.lastOut || g.thinkAcc >= THINK_INTERVAL(Math.min(g.data.position.distanceTo(s.player.feet), s.coop.partner ? g.data.position.distanceTo(s.coop.other.feet) : Infinity))) {
       const step = g.thinkAcc
       g.thinkAcc = 0
       out = g.lastOut = updateGuardBrain(g.data, perceive(s, g, step), world, step)
@@ -293,7 +306,7 @@ function perceive(s: GameSession, g: GuardEntity, dt: number): Perception {
   let position = p.active ? p.feet : s.vehicles.driving?.position ?? p.feet
   g.target = 'local'
   const o = s.coop.other
-  if (s.coop.connected && o.seen && o.alive && g.stun <= 0) {
+  if (s.coop.partner && o.seen && o.alive && g.stun <= 0) {
     target.copy(o.shown).setY(o.shown.y + (o.stance === 2 ? 0.3 : o.stance === 1 ? 0.8 : 1.3))
     const dist = eye.distanceTo(target)
     const ang = Math.abs(wrapAngle(yawTo(target.x - eye.x, target.z - eye.z) - d.yaw))
@@ -476,7 +489,7 @@ function shoot(s: GameSession, g: GuardEntity) {
   else target.copy(s.vehicles.driving!.position).setY(s.vehicles.driving!.position.y + 1)
   const distance = muzzle.distanceTo(target)
   // accuracy: worse at range, against movers, in the dark, right after spotting, and while being hit
-  const gun = GUARD_GUNS[d.kind]
+  const gun = guardGun(g)
   // rushers' SMGs spray at range; snipers barely care about distance
   const rangeErr = d.kind === 'rusher' ? 0.03 : d.kind === 'sniper' ? 0.006 : 0.018
   const err = (0.22 + distance * rangeErr + Math.max(0, 1.6 - g.trackTime * 0.55) + (g.anim.sinceHit < 1 ? 0.5 : 0) + (s.environment.playerLight < 0.3 ? 0.3 : 0)) * gun.spread

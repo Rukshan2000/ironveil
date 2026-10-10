@@ -18,9 +18,9 @@ interface PooledSquad {
 }
 
 /**
- * ReinforcementManager: pooled reaction squads (created inactive at load, so nothing is allocated mid-fight) that are
- * dispatched from believable places — barracks, vehicle area, security building, or by truck up the south road — as
- * the alert level rises, within an active-enemy cap and a cooldown between waves.
+ * ReinforcementManager: pooled reaction squads (created inactive at load, so nothing is allocated mid-fight), one per
+ * security level. Each is sent once, a muster delay after its level is first reached, from a believable place —
+ * barracks, vehicle area, by truck up the south road, or the security building. Levels 1–2 search, 3+ assault.
  */
 export class ReinforcementManager {
   readonly sources: ReinforcementSource[]
@@ -37,37 +37,16 @@ export class ReinforcementManager {
     }))
   }
 
-  get activeEnemies() {
-    return this.s.guards.filter((g) => g.active && g.data.state !== 'DEAD').length
-  }
-
-  get available() {
-    return this.squads.filter((q) => !q.deployed).length
-  }
-
   update(dt: number) {
     const level = this.s.alert.level
-    if (level < 3) {
-      this.cooldown = Math.max(this.cooldown, MUSTER_TIME)
+    const next = this.squads.find((q) => !q.deployed && q.def.minLevel <= level)
+    if (!next) {
+      this.cooldown = MUSTER_TIME
       return
     }
     if ((this.cooldown -= dt) > 0) return
-    const next = this.squads.find((q) => !q.deployed && q.def.minLevel <= level)
-    if (!next) return
-    if (this.activeEnemies + next.members.length > this.s.layout.reinforcements.maxActive) {
-      this.cooldown = 5
-      return
-    }
-    this.cooldown = this.s.layout.reinforcements.cooldown
-    this.dispatch(next, 'assault')
-  }
-
-  /** Sends a squad out without the alarm (scripted: e.g. a search team after sabotage). Returns false if none left. */
-  dispatchSearch(squadId: string, at: Vector3): boolean {
-    const q = this.squads.find((x) => x.def.id === squadId && !x.deployed)
-    if (!q) return false
-    this.dispatch(q, 'search', at)
-    return true
+    this.cooldown = MUSTER_TIME
+    this.dispatch(next, level >= 3 ? 'assault' : 'search')
   }
 
   private dispatch(q: PooledSquad, mode: 'assault' | 'search', at?: Vector3) {
@@ -89,6 +68,7 @@ export class ReinforcementManager {
           go(g)
         })
         s.radio.say('enemy', 'Convoy', `Convoy at ${s.areaName(where)}, dismounting!`)
+        s.notify(`Security level ${q.def.minLevel}: +${q.members.length} enemy reinforcements by truck`, 'warn')
       }
       if (s.vehicles.drive(source.convoy.vehicle, source.convoy.route, unload)) {
         s.radio.say('enemy', 'Control', 'Convoy, get your people up the south road. Intruder on site.')
@@ -103,7 +83,7 @@ export class ReinforcementManager {
     s.radio.say('enemy', 'Control', mode === 'search'
       ? `Reaction team, move out from ${source.label} and sweep ${s.areaName(target)}.`
       : `Reaction team moving from ${source.label}. All units, hold them there.`)
-    s.notify(`Enemy reinforcements from ${source.label}`, 'warn')
+    s.notify(`Security level ${q.def.minLevel}: +${q.members.length} enemy reinforcements from ${source.label}`, 'warn')
   }
 
   /** The squad's own source, unless the player is right there — then the furthest foot source. */

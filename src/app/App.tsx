@@ -11,6 +11,8 @@ import { HUD } from '../ui/HUD'
 import { BriefingScreen, LoadingScreen, MainMenu, PauseScreen, ResultsScreen } from '../ui/Screens'
 import { TacticalMapOverlay } from '../ui/TacticalMap'
 import { IntroOverlay } from '../game/IntroCinematic'
+import { StoryFilm } from '../game/StoryFilm'
+import { Website } from '../ui/Website'
 import { CoopChat } from '../ui/CoopChat'
 import { briefingRoom } from '../game/BriefingRoom'
 
@@ -51,7 +53,9 @@ export function App() {
       {session && (phase === 'playing' || phase === 'paused') && validationOpen && <ValidationOverlay />}
       <DebugPanel />
       <CoopChat />
+      {phase === 'home' && <Website />}
       {phase === 'menu' && <MainMenu />}
+      {phase === 'story' && <StoryFilm />}
       {phase === 'loading' && <LoadingScreen />}
       {phase === 'briefing' && <BriefingScreen />}
       {phase === 'intro' && <IntroOverlay />}

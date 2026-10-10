@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { requestLock } from '../app/actions'
+import { BUDDY_NAME } from '../ai/BuddyBot'
 import { coop } from '../net/coop'
 import { useGameStore } from '../state/gameStore'
 
@@ -14,7 +15,9 @@ export function CoopChat() {
   const [text, setText] = useState('')
   const [, tick] = useState(0)
   const field = useRef<HTMLInputElement>(null)
-  const connected = status === 'connected'
+  const phase = useGameStore((s) => s.phase)
+  const buddy = useGameStore((s) => s.buddyActive) && (phase === 'playing' || phase === 'paused')
+  const connected = status === 'connected' || buddy
 
   useEffect(() => {
     if (!connected) return
@@ -25,7 +28,7 @@ export function CoopChat() {
         useGameStore.setState({ chatOpen: true }) // before releasing the mouse, so App doesn't pause
         document.exitPointerLock()
       }
-      if (e.code === 'KeyT') coop.toggleVoice()
+      if (e.code === 'KeyT' && !buddy) coop.toggleVoice()
     }
     window.addEventListener('keydown', onKey)
     // re-render now and then so old lines fade out
@@ -34,7 +37,7 @@ export function CoopChat() {
       window.removeEventListener('keydown', onKey)
       clearInterval(t)
     }
-  }, [connected])
+  }, [connected, buddy])
   useEffect(() => {
     if (open) field.current?.focus()
   }, [open])
@@ -57,9 +60,10 @@ export function CoopChat() {
           {voice === 'ringing' && <span className="animate-pulse text-warn">FRIEND IS CALLING — T TO ANSWER</span>}
         </div>
       )}
+      {buddy && <div className="mb-2 inline-block border border-hud/30 bg-black/50 px-3 py-1 text-[11px] tracking-[0.2em] text-accent">{BUDDY_NAME.toUpperCase()} · AI — {coop.bot.status}</div>}
       {lines.map((l) => (
         <div key={l.id} className="mb-1 bg-black/40 px-2 py-0.5 leading-snug" style={{ opacity: open ? 1 : Math.min(1, (SHOW_FOR - (now - l.at)) / 2000) }}>
-          <span className={l.mine ? 'text-hud-dim' : 'text-warn'}>{l.mine ? 'You' : 'Friend'}:</span> <span className="text-hud">{l.text}</span>
+          <span className={l.mine ? 'text-hud-dim' : 'text-warn'}>{l.mine ? 'You' : buddy ? BUDDY_NAME : 'Friend'}:</span> <span className="text-hud">{l.text}</span>
         </div>
       ))}
       {open && (
@@ -78,11 +82,11 @@ export function CoopChat() {
             if (e.key === 'Escape') close()
           }}
           onBlur={() => useGameStore.getState().chatOpen && close()}
-          placeholder="Message your friend…  Enter to send · Esc to cancel"
+          placeholder={buddy ? `Order ${BUDDY_NAME}… e.g. "hold the warehouse", "attack", "follow me", "your call"` : 'Message your friend…  Enter to send · Esc to cancel'}
           className="pointer-events-auto mt-1 w-full border border-hud/40 bg-black/70 px-2 py-1.5 text-hud outline-none placeholder:text-hud-dim focus:border-hud"
         />
       )}
-      {!open && <div className="text-[10px] tracking-[0.2em] text-hud-dim/70">ENTER — CHAT · T — VOICE</div>}
+      {!open && <div className="text-[10px] tracking-[0.2em] text-hud-dim/70">{buddy ? `ENTER — ORDER ${BUDDY_NAME.toUpperCase()}` : 'ENTER — CHAT · T — VOICE'}</div>}
     </div>
   )
 }

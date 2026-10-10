@@ -16,8 +16,21 @@ const STATE_COLORS: Record<AIState, Color> = {
 }
 const LOD_FAR = 45
 
+/** Reinforcement uniforms by wave, so you can tell which security level sent them. */
+const TIER_LOOK: Record<number, Partial<SoldierLook>> = {
+  1: { tint: '#4a4f3a', head: 'cap' }, // barracks: olive fatigues, field caps
+  2: { tint: '#6a5a40', head: 'helmet' }, // vehicle crews: tan coveralls
+  3: { tint: '#2f3a2c', head: 'helmet', vest: true, optic: true }, // convoy infantry: dark green, plate carriers
+  4: { tint: '#1b1c1f', head: 'helmet', vest: true, optic: true, armband: '#d0a020', bulk: 1.06 }, // lockdown team: black
+}
+
 /** Dress by type and rank, so you can read a soldier before he opens fire. */
 function lookFor(g: GuardEntity): SoldierLook {
+  const base = garrisonLook(g)
+  return g.tier ? { ...base, ...TIER_LOOK[g.tier] } : base
+}
+
+function garrisonLook(g: GuardEntity): SoldierLook {
   const look: SoldierLook = {
     rifleman: { tint: TINT.enemy, head: 'helmet' as const },
     heavy: { tint: '#3b4030', head: 'helmet' as const, vest: true, bulk: 1.08 },

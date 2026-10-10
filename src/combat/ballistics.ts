@@ -4,7 +4,7 @@ import type { Physics, RayHit } from '../physics/Physics'
 import type { BallisticsDef } from '../weapons/types'
 
 /** `peer`: a replay of the co-op friend's shot — visuals only, their own game applies the damage. */
-export type BulletOwner = { kind: 'player' } | { kind: 'peer' } | { kind: 'guard'; id: string }
+export type BulletOwner = { kind: 'player' } | { kind: 'peer' } | { kind: 'buddy' } | { kind: 'guard'; id: string }
 
 export interface Bullet {
   active: boolean

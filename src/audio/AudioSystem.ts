@@ -30,6 +30,8 @@ export interface LoopHandle {
 const PLAYER_SHOT_GAIN = 2.6
 const SPEED_OF_SOUND = 343
 const MAX_VOICES = 56
+/** One NaN reaching a panner or the compressor silences Web Audio until reload, so bad numbers never get in. */
+const finite = (...n: number[]) => n.every(Number.isFinite)
 
 /** Drop-in sound files: src/audio/sounds/<name>.mp3|ogg|wav replaces the synthesized sound of that name (see README.md there). */
 const FILES = Object.entries(import.meta.glob('./sounds/*.{mp3,ogg,wav}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)
@@ -99,12 +101,30 @@ export class AudioSystem {
       this.reverbIn.connect(this.reverb).connect(this.master)
       this.white = this.noiseBuffer(2, false)
       this.brown = this.noiseBuffer(4, true)
+      this.selfHeal()
       for (const [name, url] of FILES) {
         fetch(url).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).then((buf) => this.samples.set(name, buf))
           .catch(() => console.warn(`Sound file ${name} could not be loaded`))
       }
     }
     void this.ctx.resume()
+  }
+
+  private paused = false
+  private healing = false
+  /**
+   * The browser may suspend the context on its own (tab switch, speech synthesis, the mic opening, Safari
+   * "interrupted"). Unless the game is paused, resume on the next state change, focus or input.
+   */
+  private selfHeal() {
+    if (this.healing || !this.ctx) return
+    this.healing = true
+    const ctx = this.ctx
+    const heal = () => {
+      if (!this.paused && ctx.state !== 'running' && ctx.state !== 'closed') void ctx.resume().catch(() => {})
+    }
+    ctx.onstatechange = heal
+    for (const e of ['pointerdown', 'keydown', 'focus', 'visibilitychange']) window.addEventListener(e, heal, true)
   }
 
   /** Settings → bus gains. Ambience stands in for music (there is no score). */
@@ -121,6 +141,7 @@ export class AudioSystem {
 
   /** Pause menu: freeze every sound (loops, tails, delayed gunfire) where it is. */
   setPaused(paused: boolean) {
+    this.paused = paused
     if (!this.ctx) return
     void (paused ? this.ctx.suspend() : this.ctx.resume())
   }
@@ -169,7 +190,7 @@ export class AudioSystem {
 
   setListener(pos: Vec, fwd: Vec, up: Vec) {
     const ctx = this.ctx
-    if (!ctx) return
+    if (!ctx || !finite(pos.x, pos.y, pos.z, fwd.x, fwd.y, fwd.z, up.x, up.y, up.z)) return
     this.listener.x = pos.x
     this.listener.y = pos.y
     this.listener.z = pos.z
@@ -201,7 +222,7 @@ export class AudioSystem {
    */
   private out(opts: { pos?: Vec | null; ref?: number; rolloff?: number; wet?: number; muffle?: boolean; bus?: GainNode; delaySound?: boolean; life: number }): Out | null {
     const ctx = this.ctx
-    if (!ctx || this.voices >= MAX_VOICES) return null
+    if (!ctx || this.voices >= MAX_VOICES || (opts.pos && !finite(opts.pos.x, opts.pos.y, opts.pos.z))) return null
     this.voices++
     setTimeout(() => this.voices--, (opts.life + 0.2) * 1000)
     let node: AudioNode = opts.bus ?? this.sfx
@@ -764,11 +785,12 @@ export class AudioSystem {
     const handle: LoopHandle = {
       gain,
       set: (param, v) => {
+        if (!finite(v)) return
         if (param === 'rate') rateParam?.(v)
         else gain.gain.setTargetAtTime(v, ctx.currentTime, 0.3)
       },
       move: (p) => {
-        if (!panner) return
+        if (!panner || !finite(p.x, p.y, p.z)) return
         panner.positionX.setTargetAtTime(p.x, ctx.currentTime, 0.05)
         panner.positionY.setTargetAtTime(p.y, ctx.currentTime, 0.05)
         panner.positionZ.setTargetAtTime(p.z, ctx.currentTime, 0.05)

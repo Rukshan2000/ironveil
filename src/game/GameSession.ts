@@ -40,6 +40,8 @@ import { updateWeapons } from './systems/weaponSystem'
 
 let sessions = 0
 const chest = new Vector3()
+/** Co-op: seconds a downed player waits before coming back beside their partner. */
+const COOP_RESPAWN = 15
 const head = new Vector3()
 const look = new Vector3()
 const UP = new Vector3(0, 1, 0)
@@ -121,6 +123,8 @@ export class GameSession {
   /** World direction damage last came from + when (HUD indicator). */
   readonly damageFrom = new Vector3()
   damageTime = -99
+  /** Co-op: how long the local player has been down (they respawn while the partner lives). */
+  downFor = 0
   private timers: { at: number; fn: () => void }[] = []
   private breathTimer = 0
   private breathIn = true
@@ -260,11 +264,11 @@ export class GameSession {
 
     const p = this.player
     this.environment.tick(dt)
-    if (p.active) {
+    if (p.active && p.alive) {
       this.environment.update(p.chest(chest))
       const w = this.weapon
       const step = p.update(dt, { aim: w.aim, recoilRecovery: w.def.recoil.recovery, fovRatio: this.fov / settings().fov, scoped: w.def.scope })
-      if (step) this.footstep(step.gait === 'land' || step.gait === 'vault', step.intensity, step.radius)
+      if (step && !this.vehicles.riding) this.footstep(step.gait === 'land' || step.gait === 'vault', step.intensity, step.radius)
       this.breathing(dt)
       this.ensureSafe(dt)
     }
@@ -288,7 +292,9 @@ export class GameSession {
     this.radio.update(dt)
     this.training.update(dt)
     this.audioZones.update(dt, p.feet)
-    this.mission.update(dt, { playerAlive: p.alive, alertLevel: this.alert.level, extractionAvailable: this.extraction.available })
+    this.coopDown(dt)
+    // co-op: the mission only fails when both players are down
+    this.mission.update(dt, { playerAlive: p.alive || (coop.connected && coop.other.alive), alertLevel: this.alert.level, extractionAvailable: this.extraction.available })
     this.effects.update(dt, (x, y, z) => this.floorAt(x, z, y), (pos, k) => audio.shellTink(pos, k), p.feet, this.environment.playerLight > 0.6)
     coop.update(dt)
     this.physics.step(dt)
@@ -300,7 +306,7 @@ export class GameSession {
   floorAt(x: number, z: number, y = 1e3) {
     if (y < 1e3) {
       const hit = this.physics.raycast(head.set(x, y + 0.3, z), DOWN, 4, undefined, 'move')
-      if (hit && hit.tag?.kind !== 'player' && hit.tag?.kind !== 'guard') return hit.point.y
+      if (hit && hit.tag?.kind !== 'player' && hit.tag?.kind !== 'guard' && hit.tag?.kind !== 'peer') return hit.point.y
     }
     return this.terrain.height(x, z)
   }
@@ -356,6 +362,31 @@ export class GameSession {
     this.suppression = Math.min(1, this.suppression + 0.5)
     audio.cue('hurt')
     useGameStore.setState({ lastDamage: performance.now() })
+  }
+
+  /**
+   * Co-op: a player who goes down while the partner lives is out of the fight for COOP_RESPAWN seconds (out of any
+   * vehicle, no moving or shooting), then comes back beside the partner at full health.
+   */
+  private coopDown(dt: number) {
+    const p = this.player
+    if (p.alive || !coop.connected) {
+      this.downFor = 0
+      return
+    }
+    if (this.downFor === 0) {
+      if (this.vehicles.driving) this.vehicles.exit()
+      this.vehicles.leaveRide()
+      if (coop.other.alive) this.notify(`You're down — back in ${COOP_RESPAWN} s beside your partner`, 'warn')
+    }
+    this.downFor += dt
+    if (this.downFor < COOP_RESPAWN || !coop.other.alive) return
+    const at = coop.other.feet.clone().add({ x: 1.5, y: 0, z: 1.5 })
+    at.y = this.floorAt(at.x, at.z, coop.other.feet.y + 1) + 0.05
+    p.teleport(this.physics.capsuleFits(at, 0.5, 0.33) ? at : coop.other.feet.clone().setY(coop.other.feet.y + 0.05))
+    p.revive()
+    this.downFor = 0
+    this.notify('Back in the fight', 'good')
   }
 
   /** Drops an item into the world (e.g. the officer's keycard when he dies). */

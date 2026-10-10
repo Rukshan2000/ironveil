@@ -229,6 +229,12 @@ export class PlayerController {
     if (this.health === 0) this.deathCause = cause
   }
 
+  /** Back on their feet (co-op respawn). */
+  revive() {
+    this.health = PLAYER.maxHealth
+    this.deathCause = null
+  }
+
   /** Being hit jolts the view a little towards/away from the shooter. */
   flinch(strength: number) {
     this.recoilPitch += 0.012 * strength

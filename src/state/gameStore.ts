@@ -8,7 +8,7 @@ import type { ChatLine, CoopStatus, VoiceState } from '../net/coop'
 import type { GameSession } from '../game/GameSession'
 import type { TimeOfDay } from '../world/environment'
 
-export type Phase = 'menu' | 'loading' | 'briefing' | 'intro' | 'playing' | 'paused' | 'dead' | 'complete'
+export type Phase = 'home' | 'menu' | 'loading' | 'briefing' | 'story' | 'intro' | 'playing' | 'paused' | 'dead' | 'complete'
 
 export interface ObjectiveView {
   id: string
@@ -149,6 +149,8 @@ interface GameStore {
   chat: ChatLine[]
   /** Chat input is open (pointer lock released without pausing). */
   chatOpen: boolean
+  /** No friend in the room: the AI Player 2 is playing (chat goes to it). */
+  buddyActive: boolean
   voice: VoiceState
   setPhase: (phase: Phase) => void
   toggleDebug: () => void
@@ -159,7 +161,7 @@ interface GameStore {
 let nextId = 1
 
 export const useGameStore = create<GameStore>((set) => ({
-  phase: 'menu',
+  phase: 'home',
   session: null,
   debug: false,
   hud: null,
@@ -180,6 +182,7 @@ export const useGameStore = create<GameStore>((set) => ({
   coopError: '',
   chat: [],
   chatOpen: false,
+  buddyActive: false,
   voice: 'off',
   setPhase: (phase) => set({ phase }),
   toggleDebug: () => set((s) => ({ debug: !s.debug })),

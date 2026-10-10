@@ -90,7 +90,7 @@ const motorPool: BoxDef[] = [
   // open-sided vehicle shed
   ...[-44, -36, -28].flatMap((x) => [-0.5, 7.5].map((dz): BoxDef => ({ p: [x, 2.2, 26 + dz], s: [0.25, 4.4, 0.25], mat: 'paintedMetal', color: 0x4a4e44 }))),
   { p: [-36, 4.5, 29.5], s: [18, 0.2, 9.5], mat: 'roof' },
-  ...truck(-41, 30, Math.PI, 0x4c5434), ...truck(-32, 30, Math.PI, 0x5a5a42, false),
+  ...truck(-41, 30, Math.PI, 0x4c5434),
   ...fuelTank(-52, 20, 0.05), ...fuelTank(-52, 26, -0.03, 6, 2.2, 0x7a7e6a),
   ...barrelGroup(-47, 17.5, 6, 0x6a3022), ...barrel(-44.5, 18.5, 0x45502e, true),
   ...generator(-30, 18.2, 0),
@@ -263,10 +263,10 @@ const ditchBushes: BoxDef[] = [
   [78, -11], [80, -21.5], [88, -14], [95, -24],
 ].flatMap(([x, z], i) => bush(x, z, 1.6 + (i % 3) * 0.5))
 
-/** Reaction squad of `n` pooled guards waiting at a source. */
-function qrf(id: string, source: string, minLevel: number, n: number, kinds: GuardKind[] = []): ReinforcementSquadDef {
-  const guards: GuardSpawn[] = Array.from({ length: n }, (_, i) => ({ id: `${id}-${i + 1}`, patrol: [[0, 0, 0]], squad: id, leader: i === 0, kind: kinds[i] }))
-  return { id, source, minLevel, guards }
+/** Reaction squad of `n` pooled guards, sent once when the security level first reaches `level`. */
+function qrf(id: string, source: string, level: number, kinds: GuardKind[]): ReinforcementSquadDef {
+  const guards: GuardSpawn[] = kinds.map((kind, i) => ({ id: `${id}-${i + 1}`, patrol: [[0, 0, 0]], squad: id, leader: i === 0, kind, tier: level }))
+  return { id, source, minLevel: level, guards }
 }
 
 const AREAS: AreaDef[] = [
@@ -381,19 +381,18 @@ export const compoundLayout: LevelLayout = {
     { id: 'power-post', patrol: [[55.5, 0, -27]], faceTowards: [62, -10], squad: 'power' },
   ],
   reinforcements: {
-    maxActive: 26,
-    cooldown: 25,
     sources: [
       { id: 'barracks', label: 'the barracks', position: [37, 0, 30.5] },
       { id: 'motor-pool', label: 'the vehicle area', position: [-36, 0, 25] },
       { id: 'compound', label: 'the security building', position: [30, 0, -42] },
       { id: 'convoy', label: 'the south road', position: [0, 0, 14], convoy: { vehicle: 'convoy-truck', route: 'convoy' } },
     ],
+    // fixed schedule, one squad per security level (+2, +3, +4, +5): told to the player in the briefing
     squads: [
-      qrf('qrf-1', 'barracks', 3, 4, ['rifleman', 'heavy', 'rusher', 'rusher']),
-      qrf('convoy', 'convoy', 3, 3, ['rifleman', 'heavy', 'rifleman']),
-      qrf('qrf-2', 'compound', 4, 3, ['rifleman', 'rusher', 'heavy']),
-      qrf('qrf-3', 'motor-pool', 4, 3, ['rifleman', 'rusher', 'rusher']),
+      qrf('level-1', 'barracks', 1, ['rifleman', 'rusher']),
+      qrf('level-2', 'motor-pool', 2, ['rifleman', 'rusher', 'heavy']),
+      qrf('level-3', 'convoy', 3, ['rifleman', 'heavy', 'rifleman', 'rusher']),
+      qrf('level-4', 'compound', 4, ['rifleman', 'heavy', 'rusher', 'rusher', 'rifleman']),
     ],
   },
   interactables: [
@@ -449,11 +448,11 @@ export const compoundLayout: LevelLayout = {
   interiors,
   props: [
     { model: 'truck', position: [-41, 30], yaw: Math.PI },
-    { model: 'truck-open', position: [-32, 30], yaw: Math.PI },
     { model: 'forklift', position: [36, -8], yaw: 0.6 },
   ],
   vehicles: [
     { def: 'jeep', position: [-34, 1.2, 7.5], yaw: -Math.PI / 2 },
+    { id: 'open-truck', def: 'truck-open', position: [-32, 1.4, 30], yaw: Math.PI },
     { id: 'supply-truck', def: 'truck', position: [-2, 1.4, 172], yaw: 0 },
     { id: 'convoy-truck', def: 'truck', position: [2, 1.4, 186], yaw: 0 },
   ],

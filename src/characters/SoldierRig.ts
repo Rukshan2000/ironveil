@@ -9,6 +9,17 @@ import type { AnimState, CharacterRig } from './types'
 // ---- shared assets ---------------------------------------------------------------------------------
 
 let assets: ReturnType<typeof makeAssets> | null = null
+const dyes = new Map<string, { uniform: ReturnType<typeof litMaterial>; vest: ReturnType<typeof litMaterial> }>()
+function dyed(a: ReturnType<typeof makeAssets>, tint: string) {
+  if (!dyes.has(tint)) {
+    const uniform = a.uniform.clone()
+    uniform.color.set(tint)
+    const vest = a.vest.clone()
+    vest.color.set(tint).multiplyScalar(0.6)
+    dyes.set(tint, { uniform, vest })
+  }
+  return dyes.get(tint)!
+}
 function makeAssets() {
   const camo = getTextures('camo')
   const helmet = getTextures('paintedMetal')
@@ -154,8 +165,10 @@ export class SoldierRig implements CharacterRig {
   private fall = 0
   private readonly fallSide = Math.random() < 0.5 ? -1 : 1
 
-  constructor() {
-    const a = (assets ??= makeAssets())
+  /** `tint` dyes the uniform and vest (Player 2 wears red so it never reads as a guard). */
+  constructor(tint?: string) {
+    const base = (assets ??= makeAssets())
+    const a = tint ? { ...base, ...dyed(base, tint) } : base
     const G = a.geo
     this.body = joint(this.root, [0, 0, 0])
     this.hips = joint(this.body, [0, 0.95, 0])
@@ -353,6 +366,10 @@ export class SoldierRig implements CharacterRig {
       // dead bodies settle hard instead of easing
       for (const name of J) for (let i = 0; i < 3; i++) this.current[name][i] = mix(this.current[name][i], p[name][i], Math.min(1, dt * 10))
     } else {
+      // standing (or back up after a respawn)
+      this.fall = 0
+      this.body.rotation.set(0, 0, 0)
+      this.body.position.y = 0
       const rate = 1 - Math.exp(-14 * dt)
       for (const name of J) for (let i = 0; i < 3; i++) this.current[name][i] += (p[name][i] - this.current[name][i]) * rate
     }

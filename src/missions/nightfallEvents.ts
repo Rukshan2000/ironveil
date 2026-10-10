@@ -96,7 +96,6 @@ export const NIGHTFALL_EVENTS: WorldEventDef[] = [
       // escalation: a search team heads for the power station
       s.schedule(9, () => {
         for (const g of s.squads.squads.find((q) => q.id === 'power')?.alive ?? []) orderSearch(g.data, POWER_STATION, s.aiWorld!)
-        if (s.reinforcements.dispatchSearch('qrf-1', POWER_STATION)) s.radio.say('enemy', 'Barracks', 'Power\'s out on the uplink. Reaction One moving to the power station.')
         s.alert.tracker.observe(2, s.time)
       })
     },

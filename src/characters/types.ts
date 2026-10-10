@@ -33,6 +33,8 @@ export interface AnimState {
   pitch?: number
   /** World direction of travel (rad, same convention as yaw) — only the co-op friend sends it. */
   moveYaw?: number
+  /** 0..1: right hand held out shaking hands (Kestrel's greeting). */
+  handshake?: number
   /** Body yaw (world), so rigs can convert deathDir into local space. */
   yaw: number
 }

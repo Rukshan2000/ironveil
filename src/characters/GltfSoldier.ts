@@ -45,8 +45,8 @@ function retarget(clip: AnimationClip, from: Object3D, to: Object3D): AnimationC
   })
   return new AnimationClip(clip.name, clip.duration, tracks)
 }
-let enemyPending: Promise<GLTF> | null = null
-export const loadEnemySoldier = () => (enemyPending ??= Promise.all([loadSoldier(), new FBXLoader().loadAsync(ENEMY_FBX)])
+/** A Mixamo FBX body driven by the stock soldier's clips (see `retarget`). */
+const loadFbxSoldier = (url: string) => Promise.all([loadSoldier(), new FBXLoader().loadAsync(url)])
   .then(([base, fbx]) => {
     const height = (o: Object3D) => {
       const b = new Box3().setFromObject(o)
@@ -63,13 +63,23 @@ export const loadEnemySoldier = () => (enemyPending ??= Promise.all([loadSoldier
     const moves = base.animations.map((c) => retarget(c, base.scene, body))
     return { ...base, scene: body, animations: dying ? [...moves, dying] : moves } as GLTF
   })
-  .catch((e) => {
-    console.warn('Enemy model not loaded, using the stock soldier', e)
-    return loadSoldier()
-  }))
+
+let enemyPending: Promise<GLTF> | null = null
+export const loadEnemySoldier = () => (enemyPending ??= loadFbxSoldier(ENEMY_FBX).catch((e) => {
+  console.warn('Enemy model not loaded, using the stock soldier', e)
+  return loadSoldier()
+}))
+
+/**
+ * Player 2's body: a Mixamo character dropped at public/models/ally.fbx (download one with skin from mixamo.com,
+ * FBX Binary, T-pose), else the enemy model dyed red so it never reads as a guard.
+ */
+const ALLY_FBX = '/models/ally.fbx'
+let allyPending: Promise<GLTF> | null = null
+export const loadAllySoldier = () => (allyPending ??= loadFbxSoldier(ALLY_FBX).catch(() => loadEnemySoldier()))
 
 /** Uniform colours: the stock suit is sand-coloured sci-fi armour, tinted per side so friend and foe read apart. */
-export const TINT = { friend: '#8a9468', enemy: '#45474c' }
+export const TINT = { friend: '#8a9468', enemy: '#45474c', ally: '#c62a22' }
 const tinted = new Map<string, Material>()
 
 /** How a soldier is dressed: uniform colour, headgear, armour vest, armband (leaders), overall bulk. */
@@ -79,6 +89,10 @@ export interface SoldierLook {
   vest?: boolean
   armband?: string
   bulk?: number
+  /** Optic and long suppressor on the rifle (elite troops). */
+  optic?: boolean
+  /** How strongly `tint` dyes a textured uniform (0..1; default: light wash, Player 2 strongly red). */
+  dye?: number
 }
 
 const gearMats = new Map<string, MeshStandardMaterial>()
@@ -142,8 +156,15 @@ function dress(model: Object3D, look: SoldierLook) {
 
 /** Plain carbine, barrel along -Z, receiver at the origin. */
 const gunMat = new MeshStandardMaterial({ color: '#25272a', roughness: 0.5, metalness: 0.6 })
-function rifle() {
+function rifle(optic = false) {
   const g = new Group()
+  if (optic) {
+    for (const [w, h, d, x, y, z] of [[0.04, 0.05, 0.14, 0, 0.07, -0.02], [0.04, 0.04, 0.16, 0, 0.01, -0.62]]) {
+      const m = new Mesh(new BoxGeometry(w, h, d), gunMat)
+      m.position.set(x, y, z)
+      g.add(m)
+    }
+  }
   for (const [w, h, d, x, y, z] of [[0.05, 0.08, 0.42, 0, 0, 0], [0.03, 0.03, 0.35, 0, 0.01, -0.38], [0.045, 0.1, 0.22, 0, -0.02, 0.3], [0.035, 0.16, 0.06, 0, -0.11, -0.06], [0.035, 0.1, 0.045, 0, -0.08, 0.1]]) {
     const m = new Mesh(new BoxGeometry(w, h, d), gunMat)
     m.position.set(x, y, z)
@@ -215,10 +236,11 @@ export class GltfSoldier implements CharacterRig {
         // textured uniforms (enemy model): a light wash of the type's colour so heavies / snipers / rushers read apart
         const mats: MeshStandardMaterial[] = Array.isArray(o.material) ? o.material : [o.material]
         const washed = mats.map((m) => {
-          const key = `${m.uuid}${tint}`
+          const key = `${m.uuid}${tint}${look.dye ?? ''}`
           if (!tinted.has(key)) {
             const c = m.clone()
-            c.color.set('#ffffff').lerp(new Color(tint), 0.4).multiplyScalar(1.25)
+            // Player 2 is dyed strongly red; enemy types only get a light wash
+            c.color.set('#ffffff').lerp(new Color(tint), look.dye ?? (tint === TINT.ally ? 0.85 : 0.4)).multiplyScalar(1.25)
             tinted.set(key, c)
           }
           return tinted.get(key)!
@@ -226,7 +248,7 @@ export class GltfSoldier implements CharacterRig {
         o.material = Array.isArray(o.material) ? washed : washed[0]
       }
     })
-    const shouldered = rifle()
+    const shouldered = rifle(look.optic)
     shouldered.position.set(0, -0.02, -0.32)
     this.shoulder.add(shouldered)
     this.shoulder.position.set(0.1, 1.42, -0.12)
@@ -265,6 +287,17 @@ export class GltfSoldier implements CharacterRig {
 
   update(dt: number, s: AnimState) {
     if (s.dead) return this.die(s, dt)
+    if (this.dyingStarted) {
+      // back up (respawned): drop the death clip, bring the locomotion clips back in
+      this.dyingStarted = false
+      this.dying?.stop()
+      for (const a of [this.idle, this.walk, this.run]) {
+        a.stopFading()
+        a.enabled = true
+        a.play()
+      }
+    }
+    this.model.rotation.z = 0
     this.model.rotation.x = 0
     this.crouch = MathUtils.damp(this.crouch, s.crouch > 0.5 ? 1 : 0, 8, dt)
     this.model.position.y = -0.4 * this.crouch
@@ -310,6 +343,13 @@ export class GltfSoldier implements CharacterRig {
       pointBone(b.foreR, grip, 1)
       pointBone(b.armL, elbowL, 1)
       pointBone(b.foreL, guard, 1)
+    }
+    // greeting: the right hand comes off the rifle and reaches forward, pumping up and down
+    const hs = s.handshake ?? 0
+    if (hs > 0.01) {
+      const shake = Math.sin(performance.now() / 1000 * 13) * 0.04
+      pointBone(this.bones.armR, this.root.localToWorld(new Vector3(0.2, 1.1, -0.24)), hs)
+      pointBone(this.bones.foreR, this.root.localToWorld(new Vector3(0.1, 1.04 + shake, -0.52)), hs)
     }
     // crouched: thighs forward, shins down to the feet (same cheap bone aim as the arms)
     if (this.crouch > 0.01) {

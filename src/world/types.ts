@@ -60,6 +60,8 @@ export interface GuardSpawn {
   leader?: boolean
   /** Soldier type (default rifleman). */
   kind?: GuardKind
+  /** Reinforcement wave (the security level that sent it, 1–4): sets uniform, armour and weapon grade. 0 = garrison. */
+  tier?: number
 }
 
 export interface ReinforcementSource {
@@ -196,7 +198,7 @@ export interface LevelLayout {
   lamps: LampDef[]
   guards: GuardSpawn[]
   /** Reaction forces dispatched by the ReinforcementManager as the alert level rises. */
-  reinforcements: { sources: ReinforcementSource[]; squads: ReinforcementSquadDef[]; maxActive: number; cooldown: number }
+  reinforcements: { sources: ReinforcementSource[]; squads: ReinforcementSquadDef[] }
   interactables: InteractableDef[]
   /** Workstations and server-rack faces (visual props; hackable ones link to an interactable). */
   computers?: ComputerDef[]

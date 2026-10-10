@@ -4,9 +4,11 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+import { hush, say } from '../audio/speech'
 import { pointBone } from '../characters/GltfSoldier'
+import { BUDDY_NAME } from '../ai/BuddyBot'
 import { NIGHTFALL } from '../missions/nightfall'
-import { useSettings } from '../state/settings'
+import { useGameStore } from '../state/gameStore'
 import type { LevelLayout } from '../world/types'
 
 /**
@@ -41,9 +43,9 @@ const canonical = (name: string) => {
   const n = name.toLowerCase().replace(/^(mixamorig:?|bip0?0?1[ _]?|def-|armature_?|cc_base_)/, '').replace(/[\s:]/g, '')
   return Object.keys(BONE_ALIASES).find((k) => BONE_ALIASES[k].includes(n))
 }
-export const OFFICE_LENGTH = 43
+export const OFFICE_LENGTH = 56
 
-type Topic = 'logo' | 'overview' | 'dawn' | 'entry' | 'compound' | 'uplink' | 'extract'
+type Topic = 'logo' | 'overview' | 'dawn' | 'entry' | 'compound' | 'uplink' | 'security' | 'support' | 'extract'
 type Shot = 'wide' | 'close' | 'screen'
 export const EVA_LINES: { from: number; to: number; text: string; topic: Topic; shot: Shot; gesture?: boolean }[] = [
   { from: 1.5, to: 6.6, topic: 'logo', shot: 'wide', text: "Wren. I'm Eva, operations. Take a seat — we don't have long." },
@@ -52,7 +54,17 @@ export const EVA_LINES: { from: number; to: number; text: string; topic: Topic; 
   { from: 19.6, to: 25.2, topic: 'entry', shot: 'screen', gesture: true, text: 'First, get inside the wire. The west ditch and the east tunnel are quiet. The main gate is not.' },
   { from: 25.6, to: 31.4, topic: 'compound', shot: 'screen', gesture: true, text: 'The orders are on the comms terminal in the walled compound. An officer in the warehouse carries the gate keycard.' },
   { from: 31.8, to: 37, topic: 'uplink', shot: 'wide', gesture: true, text: 'Copy the logs, then cut the uplink at the power station — so nobody can report that we have them.' },
-  { from: 37.4, to: 42.4, topic: 'extract', shot: 'close', text: 'Then get to the north-west pad. A helicopter will be waiting. Stay low, stay dark. Good luck.' },
+  { from: 37.4, to: 43.4, topic: 'security', shot: 'screen', gesture: true, text: 'Careful. Each time their security level rises, more troops arrive: two, then three, then four, then five.' },
+  {
+    from: 43.8, to: 50.2, topic: 'support', shot: 'close',
+    // solo: introduce the AI squadmate; co-op: the friend is the partner
+    get text() {
+      return useGameStore.getState().buddyActive
+        ? `You won't go in alone. ${BUDDY_NAME}, our best rifleman, goes with you. Give orders by radio, or let ${BUDDY_NAME} decide.`
+        : "You won't go in alone. Your partner goes in with you. Stay together and watch each other's backs."
+    },
+  },
+  { from: 50.6, to: 55.6, topic: 'extract', shot: 'close', text: 'Then get to the north-west pad. A helicopter will be waiting. Stay low, stay dark. Good luck.' },
 ]
 
 const TOPIC: Record<Topic, { title: string; lines: string[]; at: [number, number][] }> = {
@@ -62,6 +74,16 @@ const TOPIC: Record<Topic, { title: string; lines: string[]; at: [number, number
   entry: { title: '1 · GET INSIDE THE WIRE', lines: ['A — West ditch (quiet)', 'B — East utility tunnel (quiet)', 'C — Main gate (fast, watched)'], at: [[-62, -8], [66, -16], [0, 44]] },
   compound: { title: '2 · STEAL THE ORDERS', lines: ['Comms terminal — walled compound, NE', 'Keycard — officer, warehouse office', 'Hold to copy the logs (10 s)'], at: [[44, -50], [46, -6]] },
   uplink: { title: '3 · CUT THE UPLINK', lines: ['Transformer — power station, east fence', 'Station goes deaf', 'They cannot report the theft'], at: [[62, -46]] },
+  security: { title: 'IF THEY SPOT YOU', lines: ['Level 1 suspicious: +2 troops', 'Level 2 local alert: +3', 'Level 3 alarm: +4 by truck', 'Level 4 lockdown: +5', '19 on site · 33 at most'], at: [[37, 30], [-36, 25], [0, 60], [30, -42]] },
+  support: {
+    get title() { return useGameStore.getState().buddyActive ? `SUPPORT · ${BUDDY_NAME.toUpperCase()}` : 'SUPPORT · YOUR PARTNER' },
+    get lines() {
+      return useGameStore.getState().buddyActive
+        ? ['AI operator · red uniform', 'Enter: give orders', '"your call": own judgement', 'Protects you first']
+        : ['Second operative · red uniform', 'Enter: chat · T: voice', 'Stay together']
+    },
+    at: [],
+  },
   extract: { title: '4 · EXTRACT', lines: ['Helicopter — north-west landing pad', 'Hold the LZ until it lands', 'Stay low · stay dark'], at: [[-48, -54]] },
 }
 
@@ -319,12 +341,6 @@ function turnWorld(bone: Bone | undefined, worldAxis: Vector3, angle: number) {
   bone.updateMatrixWorld(true)
 }
 
-function pickVoice(): SpeechSynthesisVoice | null {
-  const voices = window.speechSynthesis?.getVoices() ?? []
-  const en = voices.filter((v) => v.lang.startsWith('en'))
-  return en.find((v) => /samantha|victoria|karen|moira|tessa|serena|zira|susan|female|aria|jenny|libby|sonia/i.test(v.name)) ?? en[0] ?? null
-}
-
 class BriefingRoom {
   readonly scene = new Scene()
   /** Set by the intro while the briefing is on screen; the render pipeline then draws this scene. */
@@ -405,12 +421,11 @@ class BriefingRoom {
     this.layout = layout
     this.spoken.clear()
     this.load()
-    window.speechSynthesis?.getVoices() // voices load lazily in some browsers
   }
 
   stop() {
     this.active = false
-    window.speechSynthesis?.cancel()
+    hush()
   }
 
   /** Advances the briefing to `t` seconds: camera shot, screen, EVA's pose and her lines. */
@@ -419,16 +434,9 @@ class BriefingRoom {
     const i = Math.max(0, EVA_LINES.findIndex((l) => t < l.to))
     const line = EVA_LINES[i]
     // speak each line once when it starts
-    if (t >= line.from && !this.spoken.has(i) && window.speechSynthesis) {
+    if (t >= line.from && !this.spoken.has(i)) {
       this.spoken.add(i)
-      const u = new SpeechSynthesisUtterance(line.text)
-      const v = pickVoice()
-      if (v) u.voice = v
-      u.rate = 1.04
-      u.pitch = 1.05
-      const st = useSettings.getState()
-      u.volume = Math.min(1, st.master * st.voice)
-      window.speechSynthesis.speak(u)
+      say(line.text, 'eva', { interrupt: true })
     }
 
     // camera: the line's shot with a slow push-in
@@ -445,6 +453,17 @@ class BriefingRoom {
       this.screen.tex.needsUpdate = true
     }
     this.pose(t, t >= line.from && t <= line.to, !!line.gesture && t > line.from + 0.6 && t < line.to - 0.8, camera.position)
+  }
+
+  /** Story film: EVA at her screen decoding the intercept — talking and gesturing, no lines; the caller places the camera. */
+  showcase(t: number, camera: PerspectiveCamera) {
+    this.active = true
+    if (this.screen && this.layout && (this.redraw -= 1) <= 0) {
+      this.redraw = 3
+      drawScreen(this.screen.ctx, this.layout, 'dawn', t)
+      this.screen.tex.needsUpdate = true
+    }
+    this.pose(t, true, t % 5 > 2, camera.position)
   }
 
   /** Procedural pose from the bind (T) pose: arms relaxed, a point at the screen, head on the listener, talking nods. */

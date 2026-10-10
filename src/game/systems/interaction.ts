@@ -55,7 +55,7 @@ export function updateInteraction(s: GameSession, dt: number) {
   objectives.handle({ type: 'position', x: player.feet.x, z: player.feet.z })
   s.prompt = null
   player.interactAvailable = false
-  if (!player.active || s.recon.active || player.vault || s.grenades.priming) return
+  if (!player.active || !player.alive || s.vehicles.riding || s.recon.active || player.vault || s.grenades.priming) return
 
   const K = bindingLabel('interact')
   const press = (t: string) => `[ ${K} ] ${t}`
@@ -172,6 +172,11 @@ export function updateInteraction(s: GameSession, dt: number) {
       text: press('Search Body — ammo'), hold: 0, progress: () => null,
       use: () => s.lootBody(g.data.id),
     }, REACH + 0.6, (t) => t?.kind === 'guard')
+  }
+
+  const ride = s.vehicles.nearRide(player.feet)
+  if (ride) {
+    consider(ride.position.clone().setY(ride.position.y + 1), { text: press(`Ride with partner — ${ride.def.name}`), hold: 0, progress: () => null, use: () => s.vehicles.board(ride) }, 4.5, (t) => t?.kind === 'vehicle')
   }
 
   const veh = s.vehicles.near(player.feet)

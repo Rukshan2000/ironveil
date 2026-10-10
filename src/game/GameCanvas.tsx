@@ -16,6 +16,7 @@ import { useSettings } from '../state/settings'
 import { GrenadeView } from '../weapons/GrenadeView'
 import { GameLoop } from './GameLoop'
 import { IntroCinematic } from './IntroCinematic'
+import { StoryDirector } from './StoryDirector'
 import { RemotePlayerView } from '../net/RemotePlayerView'
 import { input } from './input'
 import { RenderPipeline } from './RenderPipeline'
@@ -40,6 +41,7 @@ export function GameCanvas({ session }: { session: GameSession }) {
       <Fragment key={session.id}>
         <GameLoop session={session} />
         <IntroCinematic session={session} vm={vm} />
+        <StoryDirector session={session} vm={vm} />
         <WorldView session={session} />
         <ComputersView session={session} />
         <RainView session={session} />

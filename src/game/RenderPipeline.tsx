@@ -9,6 +9,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { useSettings } from '../state/settings'
 import type { GameSession } from './GameSession'
+import { useGameStore } from '../state/gameStore'
+import { storyRender } from './storyTimeline'
 import { briefingRoom } from './BriefingRoom'
 
 /** Draws the first-person weapon scene over the world after clearing depth, so it never clips into walls. */
@@ -115,9 +117,13 @@ export function RenderPipeline({ session, vm }: { session: GameSession; vm: View
   useFrame((state, delta) => {
     // EVA's briefing room is its own scene; swap it in while the briefing plays
     const office = briefingRoom.active
-    pipe.main.scene = office ? briefingRoom.scene : scene
-    if (office) gl.toneMappingExposure = 1
-    pipe.ao.enabled = quality === 'high' && post && !office
+    // the story film's stage (its own scene, like the office) replaces the world while a stage shot is on
+    const stage = storyRender.scene
+    pipe.main.scene = stage ?? (office ? briefingRoom.scene : scene)
+    if (office || stage) gl.toneMappingExposure = 1
+    // the story film's wide world shots look across the whole valley: thin the haze (reset by the environment each frame)
+    else if (useGameStore.getState().phase === 'story' && scene.fog instanceof FogExp2) scene.fog.density *= 0.3
+    pipe.ao.enabled = quality === 'high' && post && !office && !stage
     const nv = session.player.nvBlend
     // goggles amplify real light and see through the dark haze, with auto-gain: full boost at night, little at dusk
     // (the environment resets exposure and fog every frame)

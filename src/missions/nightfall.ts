@@ -8,12 +8,12 @@ export const NIGHTFALL: MissionDef = {
     'Infiltrate the Halvard Ridge signals station, pull the encrypted traffic logs from its secure comms terminal, ' +
     'cut the facility\'s uplink and get out through the north-west landing zone. Approach is your call.',
   situation:
-    'Halvard Ridge is a hardened relay station run by the 9th Signals Detachment. For six weeks it has been routing ' +
+    'Halvard Ridge is a hardened relay station run by General Drask\'s 9th Signals Detachment of the Varn Directorate. For six weeks it has been routing ' +
     'coded orders across the border, and everything points to a move on the valley at dawn. The orders are on the station\'s ' +
     'comms terminal. Copy them, then cut the uplink so the theft cannot be reported before we act on it. ' +
-    'Tonight a single operative — call sign WREN — goes in alone. No support until extraction. CANOPY will be your handler on this net.',
+    'Tonight call sign WREN goes in with one partner. No other support until extraction. CANOPY will be your handler on this net.',
   intel: [
-    'Nineteen guards on site, working in squads of two to four. Raise the alarm and up to thirteen more come in from the barracks, the compound, the vehicle area and the south road.',
+    'Nineteen guards on site, working in squads of two to four. Reinforcements are fixed by security level: level 1 brings 2 more, level 2 brings 3, level 3 (alarm) brings 4 by truck, level 4 (lockdown) brings 5 — 33 at most. Each squad comes once, and you can tell them apart: level 1 olive with caps, level 2 tan, level 3 dark green with plate carriers and scoped rifles, level 4 black with yellow armbands — the hardest-hitting troops on site.',
     'Security cameras cover the gate, the command building and the security compound. Alarm panels are wired — they work even if radios do not.',
     'The comms terminal sits in the communications building inside the walled security compound (north-east). The keycard for its gate is carried around the warehouse office.',
     'The uplink is fed from the power station on the east fence line. Kill the uplink transformer and the station goes deaf — and their squads lose long-range radio.',

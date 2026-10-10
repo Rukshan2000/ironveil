@@ -26,6 +26,10 @@ export interface VehicleDef {
   camera: { distance: number; height: number }
   /** Model to draw (see VehicleView). */
   model: 'jeep' | 'truck'
+  /** Open cargo bed (no canvas cover), drawn empty so a rider fits. */
+  open?: boolean
+  /** Where the driver's body and the AI squadmate ride (local feet positions); seated riders crouch. */
+  ride?: { driver: Vector3Tuple; passenger: Vector3Tuple; seated: boolean }
 }
 
 export const JEEP: VehicleDef = {
@@ -38,6 +42,7 @@ export const JEEP: VehicleDef = {
   suspension: { rest: 0.35, stiffness: 28, compression: 4.2, relaxation: 2.6, maxForce: 60000, travel: 0.3 },
   frictionSlip: 2.2, sideFriction: 1.2, engineForce: 2200, brakeForce: 60, maxSteer: 0.55, maxSpeed: 22,
   exit: [-1.9, 0.2, -0.3], camera: { distance: 7, height: 2.6 }, model: 'jeep',
+  ride: { driver: [-0.42, 0.55, -0.1], passenger: [0.42, 0.55, -0.1], seated: true },
 }
 
 /** Heavier, slower; ready for when the motor pool trucks become drivable. */
@@ -51,4 +56,10 @@ export const TRUCK: VehicleDef = {
   wheelRadius: 0.55, engineForce: 2600, maxSpeed: 16, maxSteer: 0.45, exit: [-2.2, 0.3, -2.4], camera: { distance: 10, height: 3.5 }, model: 'truck',
 }
 
-export const VEHICLES: Record<string, VehicleDef> = { jeep: JEEP, truck: TRUCK }
+/** The motor pool's open-top truck: drivable, empty bed — the squadmate rides standing in the back and shoots. */
+export const OPEN_TRUCK: VehicleDef = {
+  ...TRUCK, id: 'truck-open', name: 'Open Cargo Truck', open: true,
+  ride: { driver: [-0.5, 0.55, -1.75], passenger: [0.3, 0.63, 1.4], seated: false },
+}
+
+export const VEHICLES: Record<string, VehicleDef> = { jeep: JEEP, truck: TRUCK, 'truck-open': OPEN_TRUCK }

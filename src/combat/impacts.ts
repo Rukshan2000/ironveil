@@ -59,7 +59,8 @@ export function createHitHandler(s: GameSession): HitHandler {
           }
           const zone = hitZone(hit.point, g.data.position, g.crouched ? 0.7 : 1, g.data.yaw)
           const torso = zone === 'chest' || zone === 'stomach'
-          const killed = damageGuard(s, g, damage * zoneMultiplier(zone, b.headMult, b.limbMult), dir, b.owner.kind === 'player', torso)
+          const buddy = b.owner.kind === 'buddy' // the AI Player 2: its kills count, guards learn where it shot from
+          const killed = damageGuard(s, g, damage * zoneMultiplier(zone, b.headMult, b.limbMult), dir, b.owner.kind === 'player' || buddy, torso, buddy ? s.coop.other.feet : undefined)
           s.effects.impact('flesh', hit.point, hit.normal, dir)
           audio.impact('flesh', hit.point)
           if (b.owner.kind === 'player') {
@@ -78,7 +79,8 @@ export function createHitHandler(s: GameSession): HitHandler {
           return Infinity
         }
         case 'peer':
-          // the friend's own game decides what this does to them
+          // the friend's own game decides what this does to them; the AI Player 2 lives here
+          if (b.owner.kind === 'guard' && s.coop.botOn) s.coop.bot.damage(s, s.coop.other, damage)
           s.effects.impact('flesh', hit.point, hit.normal, dir)
           return b.owner.kind === 'player' ? 0 : Infinity
         case 'camera':

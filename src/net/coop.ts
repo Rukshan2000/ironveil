@@ -1,7 +1,8 @@
 import Peer, { type DataConnection, type MediaConnection } from 'peerjs'
 import { Quaternion, Vector3 } from 'three'
+import { Buddy, BUDDY_NAME } from '../ai/BuddyBot'
 import { audio } from '../audio/AudioSystem'
-import { damageGuard, GUARD_GUNS, placeGuard } from '../enemies/guards'
+import { damageGuard, guardGun, placeGuard } from '../enemies/guards'
 import type { AIState as GuardState } from '../ai/guardBrain'
 import type { GameSession } from '../game/GameSession'
 import type { MissionEvent } from '../missions/types'
@@ -17,7 +18,7 @@ import { LOADOUT } from '../weapons/definitions'
  * health, death and cheats stay local to whoever owns that player.
  */
 type Msg =
-  | { t: 'state'; p: number[] } // feet xyz, yaw, pitch, stance 0/1/2, speed, alive, aim, vehicle index (-1 on foot), then if driving: xyz, quat xyzw, speed
+  | { t: 'state'; p: number[] } // feet xyz, yaw, pitch, stance 0/1/2, speed, alive, aim, vehicle index (-1 on foot, -2 - index riding as passenger), then if driving: xyz, quat xyzw, speed
   | { t: 'pshot'; w: number; m: number[]; d: number[] }
   | { t: 'noise'; n: [string, number, number, number, number][] }
   | { t: 'guards'; g: (number | string)[][]; alert: number }
@@ -60,6 +61,10 @@ export interface PeerState {
   sinceShot: number
   sinceDeath: number
   seen: boolean
+  /** 0..1: holding out a hand to shake (AI greeting). */
+  handshake: number
+  /** Riding in the player's vehicle (AI squadmate): no hit capsule, it would shove the chassis. */
+  riding: boolean
   /** Vehicle they're driving (-1 = on foot) and its streamed transform. */
   vehicle: number
   drive: { position: Vector3; quaternion: Quaternion; speed: number }
@@ -79,13 +84,26 @@ class Coop {
   /** Client: latest guard positions from the host, eased towards each frame. */
   private guardTargets: (Vector3 | null)[] = []
   readonly other: PeerState = {
-    feet: new Vector3(), shown: new Vector3(), yaw: 0, pitch: 0, stance: 0, speed: 0, alive: true, aim: 0, sinceShot: 99, sinceDeath: 0, seen: false,
+    feet: new Vector3(), shown: new Vector3(), yaw: 0, pitch: 0, stance: 0, speed: 0, alive: true, aim: 0, sinceShot: 99, sinceDeath: 0, seen: false, handshake: 0, riding: false,
     vehicle: -1, drive: { position: new Vector3(), quaternion: new Quaternion(), speed: 0 },
   }
 
   get connected() {
     return !!this.conn?.open
   }
+  /** AI Player 2: plays the other slot while no friend is connected (never on a joining client). */
+  readonly bot = new Buddy()
+  constructor() {
+    this.bot.onSay = (text) => this.addChat(false, text)
+  }
+  get botOn() {
+    return !!this.s && this.role !== 'client' && !this.connected
+  }
+  /** Someone (friend or AI) is in the other player's slot. */
+  get partner() {
+    return this.connected || this.botOn
+  }
+
   get isClient() {
     return this.role === 'client' && this.connected
   }
@@ -147,6 +165,7 @@ class Coop {
     this.conn = c
     c.on('open', () => {
       this.status('connected')
+      useGameStore.setState({ buddyActive: false })
       this.s?.notify('Friend connected', 'good')
     })
     c.on('data', (m) => this.receive(m as Msg))
@@ -159,6 +178,7 @@ class Coop {
       this.other.seen = false
       this.proxy?.collider.setEnabled(false)
       this.s?.notify('Friend disconnected', 'warn')
+      this.startBot()
       this.status(this.role === 'host' && this.peer ? 'hosting' : 'off')
     })
   }
@@ -175,6 +195,7 @@ class Coop {
     this.shots = 0
     this.proxy = s.physics.createCapsule(new Vector3(0, -50, 0), 0.5, 0.35, { kind: 'peer' })
     this.proxy.collider.setEnabled(false)
+    this.startBot()
     const handle = s.objectives.handle.bind(s.objectives)
     this.originalHandle = handle
     s.objectives.handle = (e) => {
@@ -189,25 +210,44 @@ class Coop {
     if (this.role === 'client') s.player.teleport(v.copy(s.player.feet).add(d.set(2, 0.05, 1.5)))
   }
 
-  /** Runs at the end of every session update. */
-  update(dt: number) {
-    const s = this.s
-    if (!s || !this.connected) return
-    const p = s.player
+  private startBot() {
+    const on = this.botOn
+    useGameStore.setState({ buddyActive: on })
+    if (on) {
+      this.bot.reset(this.s!, this.other)
+      this.s!.notify(`${BUDDY_NAME} (AI) is with you — press Enter to give orders`, 'good')
+    }
+  }
+
+  /** Eases the other player's shown position and keeps their hit capsule on it. */
+  private moveOther(dt: number) {
     const o = this.other
     o.sinceShot += dt
     if (!o.alive) o.sinceDeath += dt
     if (o.seen) {
       o.shown.lerp(o.feet, o.shown.distanceTo(o.feet) > 4 ? 1 : 1 - Math.exp(-15 * dt))
-      this.proxy!.collider.setEnabled(o.alive)
+      this.proxy!.collider.setEnabled(o.alive && !o.riding)
       this.proxy!.body.setNextKinematicTranslation({ x: o.shown.x, y: o.shown.y + 0.85, z: o.shown.z })
     }
+  }
+
+  /** Runs at the end of every session update. */
+  update(dt: number) {
+    const s = this.s
+    if (!s) return
+    if (!this.connected) {
+      if (!this.botOn) return
+      this.bot.update(s, this.other, this.proxy!, dt)
+      return this.moveOther(dt)
+    }
+    const p = s.player
+    this.moveOther(dt)
 
     if ((this.sendTimer -= dt) <= 0) {
       this.sendTimer = STATE_RATE
       const f = p.feet
       const veh = s.vehicles.driving
-      const drive = veh ? [s.vehicles.vehicles.indexOf(veh), r2(veh.position.x), r2(veh.position.y), r2(veh.position.z), ...veh.quaternion.toArray().map((q) => Math.round(q * 1e4) / 1e4), r2(veh.speed)] : [-1]
+      const drive = veh ? [s.vehicles.vehicles.indexOf(veh), r2(veh.position.x), r2(veh.position.y), r2(veh.position.z), ...veh.quaternion.toArray().map((q) => Math.round(q * 1e4) / 1e4), r2(veh.speed)] : [s.vehicles.riding ? -2 - s.vehicles.vehicles.indexOf(s.vehicles.riding) : -1]
       this.send({ t: 'state', p: [r2(f.x), r2(f.y), r2(f.z), r2(p.yaw), r2(p.pitch), p.prone ? 2 : p.crouching ? 1 : 0, r2(p.speed), p.alive ? 1 : 0, r2(s.weapon.aim), ...drive] })
     }
     if (s.stats.shots !== this.shots) {
@@ -264,6 +304,11 @@ class Coop {
 
   sendChat(text: string) {
     text = text.trim().slice(0, 200)
+    if (text && this.botOn) {
+      this.addChat(true, text)
+      this.bot.command(this.s!, this.other, text).then((reply) => this.addChat(false, reply))
+      return
+    }
     if (!text || !this.connected) return
     this.send({ t: 'chat', text })
     this.addChat(true, text)
@@ -363,9 +408,12 @@ class Coop {
           veh.setRemote(o.drive)
         }
         o.vehicle = veh ? vehicle : -1
+        // riding in our vehicle as passenger: no hit capsule (it would shove our chassis); seated riders crouch
+        o.riding = vehicle <= -2
+        const rideIn = s.vehicles.vehicles[-2 - vehicle]
         if (!o.seen) o.shown.copy(o.feet)
         o.seen = true
-        Object.assign(o, { yaw, pitch, stance, speed, aim })
+        Object.assign(o, { yaw, pitch, stance: o.riding && rideIn?.def.ride?.seated ? 1 : stance, speed, aim })
         if (o.alive && !alive) o.sinceDeath = 0
         o.alive = !!alive
         break
@@ -420,7 +468,7 @@ class Coop {
         if (!g) return
         v.fromArray(m.m)
         d.fromArray(m.d)
-        const gun = GUARD_GUNS[g.data.kind]
+        const gun = guardGun(g)
         s.ballistics.fire(v, d, gun.def.ballistics, gun.damage, { head: 1.5, limb: 0.75 }, { kind: 'guard', id: g.data.id }, g.character.collider, true)
         audio.gunshot(gun.def.sound, v)
         s.effects.muzzle(v, d, 0.6)

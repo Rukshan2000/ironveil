@@ -35,6 +35,7 @@ const LEGEND: [string, string][] = [
 
 export function TacticalMapOverlay() {
   const hud = useGameStore((s) => s.hud)
+  const session = useGameStore((s) => s.session)
   if (!hud) return null
   const level = hud.alertLevel as AlertLevel
   return (
@@ -52,6 +53,14 @@ export function TacticalMapOverlay() {
             <div className="hud-label">Security level</div>
             <div className={`mt-1 tracking-[0.2em] ${level >= 3 ? 'text-danger' : level >= 1 ? 'text-warn' : 'text-accent'}`}>{level} · {ALERT_LABELS[level]}</div>
             {hud.commsDown && <div className="mt-1 tracking-[0.2em] text-accent">ENEMY UPLINK DOWN</div>}
+          </div>
+          <div>
+            <div className="hud-label">Reinforcements by level</div>
+            {session?.reinforcements.squads.map((q) => (
+              <div key={q.def.id} className={q.deployed ? 'text-danger' : level >= q.def.minLevel ? 'text-warn' : 'text-hud/60'}>
+                Level {q.def.minLevel} · +{q.members.length} {q.deployed ? '— arrived' : level >= q.def.minLevel ? '— mustering' : ''}
+              </div>
+            ))}
           </div>
           <div>
             <div className="hud-label">Objectives</div>

@@ -1,5 +1,6 @@
 import { Color, Vector3 } from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
+import { cheats } from '../game/input'
 import type { Physics } from '../physics/Physics'
 import type { Terrain } from './terrain'
 import type { LevelLayout, Surface } from './types'
@@ -160,7 +161,8 @@ export class Environment {
   /** Advances the clock and the weather and rebuilds `preset`, the sun/moon direction and the derived factors. */
   tick(dt: number) {
     this.elapsed += dt
-    this.hour = (this.hour + (dt * TIME_SCALE) / 3600) % 24
+    // DAYLIGHT cheat: the clock stands at noon
+    this.hour = cheats.day ? 12 : (this.hour + (dt * TIME_SCALE) / 3600) % 24
     const h = this.hour
     // day cycle: blend the two keyframes around this hour (wrapping through midnight)
     let i = CYCLE.findIndex(([at]) => at > h) - 1

@@ -14,7 +14,7 @@ const mouse = { dx: 0, dy: 0, wheel: 0 }
 let capture: ((code: string) => void) | null = null
 
 /** Typing IMMORTAL anywhere toggles god mode, LOCKNLOAD toggles unlimited ammo. */
-export const cheats = { god: false, ammo: false }
+export const cheats = { god: false, ammo: false, day: false }
 let typed = ''
 
 // Keys the browser would otherwise act on (help, scroll, find, menus…).
@@ -70,12 +70,13 @@ export function attachInput(): () => void {
       return capture(e.code)
     }
     typed = (typed + e.key.toUpperCase()).slice(-9)
-    const toggle = (key: 'god' | 'ammo', label: string) => {
+    const toggle = (key: keyof typeof cheats, label: string) => {
       cheats[key] = !cheats[key]
       useGameStore.getState().pushMessage(`CHEAT: ${label} ${cheats[key] ? 'ON' : 'OFF'}`, cheats[key] ? 'good' : 'warn')
     }
     if (typed.endsWith('IMMORTAL')) toggle('god', 'God mode')
     if (typed.endsWith('LOCKNLOAD')) toggle('ammo', 'Unlimited ammo')
+    if (typed.endsWith('DAYLIGHT')) toggle('day', 'Always daylight')
     if (PREVENT.has(e.code) && document.pointerLockElement) e.preventDefault()
     if (e.code === 'Tab' || e.code === 'F1' || e.code === 'F2') e.preventDefault()
     if (!e.repeat) press(e.code)

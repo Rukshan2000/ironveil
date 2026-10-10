@@ -95,9 +95,10 @@ export class GrenadeSystem {
       if (ORDER.some((k) => this.counts[k] > 0)) {
         if (this.counts[this.selected] === 0) this.selected = ORDER.find((k) => this.counts[k] > 0)!
         this.equipped = true
+        // the gun is already put away when the knife is out; lowering it again would flash it back into view
+        if (!s.knife.equipped) s.weapon.lower()
         s.knife.equipped = false
         s.pendingWeapon = null
-        s.weapon.lower()
         audio.cloth(0.5)
         s.notify(`${GRENADES[this.selected].name} in hand — ${this.counts[this.selected]} left`, 'info')
       } else s.notify('No grenades left', 'warn')
