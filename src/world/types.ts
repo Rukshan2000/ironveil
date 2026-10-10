@@ -229,8 +229,18 @@ export interface LevelLayout {
   channels: [number, number, number, number, number, number][]
   /** Visual marker for the extraction zone. */
   extraction: { position: Vector3Tuple; radius: number }
+  /** Climbable ladders: stand at `bottom` (or on `top`) and use them. */
+  ladders?: LadderDef[]
+  /** Health packs [x, z]; each sits on the floor/table there and restores health once. */
+  healthPacks?: [number, number][]
   /** Bounds used by the minimap and nav grid: [minX, minZ, maxX, maxZ]. */
   bounds: [number, number, number, number]
+}
+
+/** A ladder: where you stand to climb it (feet, ground side) and where you step off at the top. */
+export interface LadderDef {
+  bottom: Vector3Tuple
+  top: Vector3Tuple
 }
 
 /** A parked vehicle model (non-drivable scenery). Position is x, z; front faces local -Z. */

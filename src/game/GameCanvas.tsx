@@ -17,6 +17,8 @@ import { GrenadeView } from '../weapons/GrenadeView'
 import { GameLoop } from './GameLoop'
 import { IntroCinematic } from './IntroCinematic'
 import { StoryDirector } from './StoryDirector'
+import { MedkitView } from '../world/MedkitView'
+import { GunshipView } from '../extraction/GunshipView'
 import { RemotePlayerView } from '../net/RemotePlayerView'
 import { input } from './input'
 import { RenderPipeline } from './RenderPipeline'
@@ -44,6 +46,7 @@ export function GameCanvas({ session }: { session: GameSession }) {
         <StoryDirector session={session} vm={vm} />
         <WorldView session={session} />
         <ComputersView session={session} />
+        <MedkitView session={session} />
         <RainView session={session} />
         <FlashlightView session={session} />
         <GuardsView session={session} />
@@ -52,6 +55,7 @@ export function GameCanvas({ session }: { session: GameSession }) {
         <VehicleView session={session} />
         <ParkedVehicles session={session} />
         <HelicopterView session={session} />
+        <GunshipView session={session} />
         <EffectsView session={session} />
         <GrenadeView session={session} />
         <WeaponView session={session} vm={vm} />

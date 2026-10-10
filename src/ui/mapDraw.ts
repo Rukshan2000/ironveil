@@ -154,6 +154,15 @@ export function bakeLevel(s: Pick<GameSession, 'layout' | 'terrain' | 'vegetatio
   return c
 }
 
+/** Health pack icon: green square with a white cross, centred on (x, y), `r` px half-size. */
+export function drawMedkit(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.fillStyle = '#2f8a46'
+  ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(x - r * 0.65, y - r * 0.2, r * 1.3, r * 0.4)
+  ctx.fillRect(x - r * 0.2, y - r * 0.65, r * 0.4, r * 1.3)
+}
+
 const FONT = '"DIN Alternate", "Bahnschrift", "Roboto Condensed", sans-serif'
 
 /**
@@ -234,6 +243,9 @@ export function drawTacticalMap(ctx: CanvasRenderingContext2D, s: GameSession, b
       ctx.fillText(String(s.def.objectives.filter((x) => !x.optional).indexOf(o) + 1), X(pos[0]), Z(pos[2]) - 13)
     }
   }
+
+  // health packs still in the base (on the planning map too)
+  for (const m of s.medkits) if (!m.taken) drawMedkit(ctx, X(m.position.x), Z(m.position.z), 5)
 
   if (briefing) {
     // planned approaches and the insertion point

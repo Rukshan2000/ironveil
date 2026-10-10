@@ -12,6 +12,7 @@ import { createHitHandler } from '../combat/impacts'
 import { SURFACES } from '../combat/surfaces'
 import { EffectsSystem } from '../effects/EffectsSystem'
 import { createGuardEntity, updateGuards, type GuardEntity } from '../enemies/guards'
+import { EscapeSequence } from '../extraction/EscapeSequence'
 import { ExtractionSystem } from '../extraction/ExtractionSystem'
 import { saveCheckpoint } from '../missions/checkpoint'
 import { MissionSystem } from '../missions/MissionSystem'
@@ -19,7 +20,7 @@ import { coop } from '../net/coop'
 import { ObjectiveManager } from '../missions/ObjectiveManager'
 import type { MissionDef } from '../missions/types'
 import { initPhysics, Physics } from '../physics/Physics'
-import { PlayerController, type DeathCause } from '../player/PlayerController'
+import { PLAYER, PlayerController, type DeathCause } from '../player/PlayerController'
 import { ReconSystem } from '../recon/ReconSystem'
 import { ALERT_LABELS, AlertSystem } from '../security/AlertSystem'
 import { SecuritySystem } from '../security/SecuritySystem'
@@ -32,7 +33,7 @@ import { WeaponController } from '../weapons/WeaponController'
 import { LOADOUT } from '../weapons/definitions'
 import { Environment, type TimeOfDay } from '../world/environment'
 import { Terrain } from '../world/terrain'
-import type { LevelLayout, PickupDef } from '../world/types'
+import type { LadderDef, LevelLayout, PickupDef } from '../world/types'
 import { generateVegetation, type Vegetation } from '../world/vegetation'
 import { WorldEventSystem, type WorldEventDef } from '../world/WorldEventSystem'
 import { updateInteraction } from './systems/interaction'
@@ -42,6 +43,13 @@ let sessions = 0
 const chest = new Vector3()
 /** Co-op: seconds a downed player waits before coming back beside their partner. */
 const COOP_RESPAWN = 15
+/** Incoming damage to the player is scaled by this (firefights last long enough to react and reach a health pack). */
+const DAMAGE_TAKEN = 0.55
+/** Health a pack restores. */
+const MEDKIT_HEAL = 50
+/** Ladder climbing speed (m/s) and the step-off time at the top. */
+const CLIMB_SPEED = 2.2
+const STEP_OFF = 0.45
 const head = new Vector3()
 const look = new Vector3()
 const UP = new Vector3(0, 1, 0)
@@ -82,6 +90,12 @@ export class GameSession {
   readonly security: SecuritySystem
   readonly vehicles: VehicleSystem
   readonly pickups: (PickupDef & { taken: boolean })[]
+  /** Health packs placed around the base (each usable once). */
+  readonly medkits: { position: Vector3; taken: boolean }[]
+  /** Ladder climb in progress (player moved along it, no walking). */
+  climb: { ladder: LadderDef; up: boolean; t: number } | null = null
+  /** The helicopter escape after extraction (door gun vs Varn gunships); the mission ends when it does. */
+  escape: EscapeSequence | null = null
   /** Item ids the player carries (keycards). */
   readonly inventory = new Set<string>()
   readonly stats: Stats = { time: 0, kills: 0, alarms: 0, shots: 0, hits: 0, headshots: 0, grenades: 0 }
@@ -144,6 +158,11 @@ export class GameSession {
     this.nav = new NavGrid(layout.bounds, layout.boxes)
     this.coverPoints = buildCoverPoints(layout.boxes, this.nav)
     this.pickups = layout.pickups.map((p) => ({ ...p, taken: false }))
+    // each pack goes on walkable floor near its spot, on whatever surface is there (floor or table)
+    this.medkits = (layout.healthPacks ?? []).map(([x, z]) => {
+      const at = this.nav.nearestWalkable(x, z, 4) ?? new Vector3(x, 0, z)
+      return { position: new Vector3(at.x, this.floorAt(at.x, at.z, 2.6) + 0.02, at.z), taken: false }
+    })
     this.effects = new EffectsSystem(layout.smoke)
     this.ballistics = new Ballistics(this.physics, createHitHandler(this))
     this.grenades = new GrenadeSystem(this)
@@ -191,7 +210,7 @@ export class GameSession {
     this.mission.onEnter = (state) => {
       if (state === 'SUCCESS') {
         this.objectives.finalize()
-        this.endAt = this.time + 2.5
+        this.escape = new EscapeSequence(this) // the results wait until the helicopter is out
       }
     }
     this.radio.onLine = (line) => useGameStore.getState().pushRadio(line)
@@ -268,9 +287,14 @@ export class GameSession {
       this.environment.update(p.chest(chest))
       const w = this.weapon
       const step = p.update(dt, { aim: w.aim, recoilRecovery: w.def.recoil.recovery, fovRatio: this.fov / settings().fov, scoped: w.def.scope })
-      if (step && !this.vehicles.riding) this.footstep(step.gait === 'land' || step.gait === 'vault', step.intensity, step.radius)
+      if (step && !this.vehicles.riding && !this.climb) this.footstep(step.gait === 'land' || step.gait === 'vault', step.intensity, step.radius)
       this.breathing(dt)
       this.ensureSafe(dt)
+    }
+    this.updateClimb(dt)
+    if (this.escape) {
+      this.escape.update(dt)
+      if (this.escape.phase === 'escaped' && this.endAt === Infinity) this.endAt = this.time + 4
     }
     this.shake = Math.max(0, this.shake - dt * 1.8)
     this.grenades.update(dt)
@@ -354,6 +378,7 @@ export class GameSession {
   }
 
   damagePlayer(amount: number, dir: Vector3, cause: DeathCause = 'Eliminated', torso = false) {
+    amount *= DAMAGE_TAKEN
     if (this.vehicles.driving) amount *= 0.5 // some protection from the bodywork
     this.player.damage(amount, cause, torso)
     this.player.flinch(Math.min(1.5, amount / 15))
@@ -389,6 +414,48 @@ export class GameSession {
     this.notify('Back in the fight', 'good')
   }
 
+  /** Uses a health pack: +MEDKIT_HEAL health (capped), the pack is gone. */
+  useMedkit(m: { position: Vector3; taken: boolean }) {
+    const p = this.player
+    if (m.taken || p.health >= PLAYER.maxHealth) return
+    m.taken = true
+    p.health = Math.min(PLAYER.maxHealth, p.health + MEDKIT_HEAL)
+    audio.cue('pickup')
+    this.notify(`Health pack used — health ${Math.ceil(p.health)}`, 'good')
+  }
+
+  /** Starts climbing a ladder up (from its foot) or down (from the top). */
+  startClimb(ladder: LadderDef, up: boolean) {
+    this.climb = { ladder, up, t: 0 }
+    this.player.character.collider.setEnabled(false) // through the parapet / platform edge
+    audio.cloth(0.6)
+  }
+
+  /**
+   * Moves the player along the ladder: straight up (or down) the rungs, then a short step on/off the platform.
+   * Looking around still works; walking, jumping and footsteps don't.
+   */
+  private updateClimb(dt: number) {
+    const c = this.climb
+    if (!c) return
+    const p = this.player
+    const foot = new Vector3(...c.ladder.bottom), top = new Vector3(...c.ladder.top)
+    const rise = (top.y - foot.y) / CLIMB_SPEED, total = rise + STEP_OFF
+    const before = c.t
+    c.t = Math.min(total, c.t + dt)
+    if (Math.floor(before / 0.45) !== Math.floor(c.t / 0.45)) audio.cloth(0.35) // hands and boots on the rungs
+    // time along the path from the foot: rungs first, then the step onto the platform
+    const u = c.up ? c.t : total - c.t
+    const at = u <= rise
+      ? foot.clone().setY(foot.y + (top.y - foot.y) * (u / rise))
+      : foot.clone().setY(top.y).lerp(top, (u - rise) / STEP_OFF)
+    p.teleport(at)
+    if (c.t < total) return
+    p.teleport(c.up ? top : foot)
+    p.character.collider.setEnabled(true)
+    this.climb = null
+  }
+
   /** Drops an item into the world (e.g. the officer's keycard when he dies). */
   dropPickup(id: string, at: Vector3) {
     if (this.inventory.has(id)) return
@@ -402,7 +469,7 @@ export class GameSession {
 
   /** Overridden by the vehicle system while driving. Returns true when it positioned the camera. */
   applyVehicleCamera(camera: Camera): boolean {
-    return this.vehicles.applyCamera(camera)
+    return this.escape?.applyCamera(camera) || this.vehicles.applyCamera(camera)
   }
 
   /** Feed the audio listener from the camera. */
@@ -433,6 +500,7 @@ export class GameSession {
   }
 
   dispose() {
+    this.escape?.dispose()
     this.extraction.dispose()
     this.security.dispose()
     this.vehicles.dispose()

@@ -486,7 +486,7 @@ function shoot(s: GameSession, g: GuardEntity) {
   const o = s.coop.other
   if (g.target === 'peer') target.copy(o.shown).setY(o.shown.y + (o.stance === 2 ? 0.3 : o.stance === 1 ? 0.8 : 1.3))
   else if (p.active) p.chest(target)
-  else target.copy(s.vehicles.driving!.position).setY(s.vehicles.driving!.position.y + 1)
+  else target.copy(s.vehicles.driving?.position ?? p.feet).setY((s.vehicles.driving?.position ?? p.feet).y + 1) // in a vehicle or the escape helicopter
   const distance = muzzle.distanceTo(target)
   // accuracy: worse at range, against movers, in the dark, right after spotting, and while being hit
   const gun = guardGun(g)

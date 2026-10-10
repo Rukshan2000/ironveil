@@ -1,7 +1,7 @@
 import type { GuardKind } from '../ai/guardBrain'
 import {
   acUnit, barrel, barrelGroup, building, bush, container, crateStack, electricalBox, fence, forklift, fuelTank, generator,
-  hangar, helipad, jersey, pallet, pipeRun, place, radioMast, roadLine, sandbags, stairs, tower, transformer, truck, utilityPole, wall,
+  hangar, helipad, jersey, pallet, pipeRun, place, radioMast, roadLine, sandbags, stairs, tower, towerLadder, transformer, truck, utilityPole, wall,
 } from './builders'
 import type { AreaDef, BoxDef, CableDef, GuardSpawn, InteriorDef, LampDef, LevelLayout, ReinforcementSquadDef } from './types'
 
@@ -491,5 +491,9 @@ export const compoundLayout: LevelLayout = {
     [73, -16, 112, -26, 7, 0], // track down to the utility tunnel
   ],
   extraction: { position: [-48, 0, -54], radius: 5 },
+  // the two watchtowers' ladders (same placement as their tower() calls)
+  ladders: [towerLadder(14, 62, 6, 0), towerLadder(54, -60, 7, Math.PI)],
+  // health packs: barracks, warehouse, command building, motor pool, main gate, maintenance, security compound, landing pad
+  healthPacks: [[37, 30.5], [40, -12], [-24, -30], [-36, 22], [-9, 40], [66, -14], [32, -40], [-44, -50]],
   bounds: [-120, -80, 120, 135],
 }

@@ -4,7 +4,7 @@ import { objectiveTarget } from '../missions/ObjectiveManager'
 import { doorCenter } from '../security/SecuritySystem'
 import { useGameStore } from '../state/gameStore'
 import { settings } from '../state/settings'
-import { BAKE_SCALE, bakeLevel, GUARD_COLORS } from './mapDraw'
+import { BAKE_SCALE, bakeLevel, drawMedkit, GUARD_COLORS } from './mapDraw'
 
 const SIZE = 150
 const PX_PER_M = 1.6
@@ -31,7 +31,8 @@ export function Minimap() {
     const draw = () => {
       const { player, guards, physics, vehicles } = session
       const center = vehicles.driving?.position ?? player.feet
-      const heading = player.active ? player.yaw : Math.atan2(-vehicles.driving!.forward(eye).x, -eye.z)
+      // inactive without a vehicle = aboard the escape helicopter: follow its heading
+      const heading = vehicles.driving ? Math.atan2(-vehicles.driving.forward(eye).x, -eye.z) : session.escape ? session.extraction.heliYaw : player.yaw
       // heading-up (rotating) or north-up with a rotating player arrow
       const rotate = settings().minimapRotate
       const yaw = rotate ? heading : 0
@@ -87,6 +88,7 @@ export function Minimap() {
         ctx.fillRect(-d.def.width * PX_PER_M / 2, -1, d.def.width * PX_PER_M, 2)
         ctx.restore()
       }
+      for (const m of session.medkits) if (!m.taken) drawMedkit(ctx, m.position.x * PX_PER_M, m.position.z * PX_PER_M, 3.5)
       for (const v of vehicles.vehicles) {
         ctx.fillStyle = 'rgba(169,191,142,0.8)'
         ctx.fillRect(v.position.x * PX_PER_M - 2, v.position.z * PX_PER_M - 3, 4, 6)

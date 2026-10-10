@@ -13,6 +13,7 @@ import { TacticalMapOverlay } from '../ui/TacticalMap'
 import { IntroOverlay } from '../game/IntroCinematic'
 import { StoryFilm } from '../game/StoryFilm'
 import { Website } from '../ui/Website'
+import { EscapeOverlay } from '../extraction/EscapeOverlay'
 import { CoopChat } from '../ui/CoopChat'
 import { briefingRoom } from '../game/BriefingRoom'
 
@@ -49,6 +50,7 @@ export function App() {
     <div className="fixed inset-0" onClick={() => phase === 'playing' && !document.pointerLockElement && requestLock()}>
       {session && <GameCanvas session={session} />}
       {session && (phase === 'playing' || phase === 'paused') && <HUD />}
+      {session && phase === 'playing' && <EscapeOverlay />}
       {session && phase === 'playing' && mapOpen && <TacticalMapOverlay />}
       {session && (phase === 'playing' || phase === 'paused') && validationOpen && <ValidationOverlay />}
       <DebugPanel />

@@ -30,7 +30,7 @@ export function TacticalMap({ briefing = false }: { briefing?: boolean }) {
 
 const LEGEND: [string, string][] = [
   ['◆', 'Objective (amber: current)'], ['■', 'Camera (discovered)'], ['●', 'Searchlight'], ['A', 'Alarm panel'],
-  ['•', 'Tagged hostile'], ['- -', 'Restricted area'], ['▬', 'Road'], ['▢', 'Building (walls bright)'], ['♣', 'Trees / cover'],
+  ['•', 'Tagged hostile'], ['- -', 'Restricted area'], ['▬', 'Road'], ['▢', 'Building (walls bright)'], ['♣', 'Trees / cover'], ['✚', 'Health pack (+50, green)'],
 ]
 
 export function TacticalMapOverlay() {

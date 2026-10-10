@@ -121,8 +121,9 @@ export function RenderPipeline({ session, vm }: { session: GameSession; vm: View
     const stage = storyRender.scene
     pipe.main.scene = stage ?? (office ? briefingRoom.scene : scene)
     if (office || stage) gl.toneMappingExposure = 1
-    // the story film's wide world shots look across the whole valley: thin the haze (reset by the environment each frame)
-    else if (useGameStore.getState().phase === 'story' && scene.fog instanceof FogExp2) scene.fog.density *= 0.3
+    // the story film's wide shots and the helicopter escape look across the whole valley: thin the haze (reset by the
+    // environment each frame)
+    else if ((useGameStore.getState().phase === 'story' || session.escape) && scene.fog instanceof FogExp2) scene.fog.density *= 0.35
     pipe.ao.enabled = quality === 'high' && post && !office && !stage
     const nv = session.player.nvBlend
     // goggles amplify real light and see through the dark haze, with auto-gain: full boost at night, little at dusk

@@ -1,3 +1,4 @@
+import { PLAYER } from '../../player/PlayerController'
 import { Vector3 } from 'three'
 import { audio } from '../../audio/AudioSystem'
 import type { ColliderTag } from '../../physics/Physics'
@@ -55,7 +56,7 @@ export function updateInteraction(s: GameSession, dt: number) {
   objectives.handle({ type: 'position', x: player.feet.x, z: player.feet.z })
   s.prompt = null
   player.interactAvailable = false
-  if (!player.active || !player.alive || s.vehicles.riding || s.recon.active || player.vault || s.grenades.priming) return
+  if (!player.active || !player.alive || s.vehicles.riding || s.climb || s.recon.active || player.vault || s.grenades.priming) return
 
   const K = bindingLabel('interact')
   const press = (t: string) => `[ ${K} ] ${t}`
@@ -106,6 +107,26 @@ export function updateInteraction(s: GameSession, dt: number) {
         }
       },
     })
+  }
+
+  // ladders: from the foot up, or from the platform down
+  for (const l of s.layout.ladders ?? []) {
+    const foot = new Vector3(...l.bottom), top = new Vector3(...l.top)
+    if (player.feet.distanceTo(foot) < 1.6) {
+      consider(foot.clone().setY(foot.y + 1.3), { text: press('Climb up the ladder'), hold: 0, progress: () => null, use: () => s.startClimb(l, true) }, 2.6, () => true)
+    } else if (player.feet.distanceTo(top) < 1.6) {
+      consider(top.clone().setY(top.y + 0.4), { text: press('Climb down the ladder'), hold: 0, progress: () => null, use: () => s.startClimb(l, false) }, 2.6, () => true)
+    }
+  }
+
+  // health packs
+  for (const m of s.medkits) {
+    if (m.taken) continue
+    const full = player.health >= PLAYER.maxHealth
+    consider(m.position.clone().setY(m.position.y + 0.15), {
+      text: full ? 'Health pack — health already full' : press('Use health pack (+50 health)'), hold: 0, progress: () => null,
+      use: () => s.useMedkit(m),
+    }, REACH + 0.4)
   }
 
   for (const p of s.pickups) {

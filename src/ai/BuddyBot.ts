@@ -109,6 +109,14 @@ export class Buddy {
       o.shown.copy(o.feet)
       this.path = []
     }
+    if (s.escape) {
+      // aboard the helicopter: on the left door gun (the escape sequence fires it)
+      s.escape.partnerSeat(o.feet)
+      o.shown.copy(o.feet)
+      o.riding = true
+      Object.assign(o, { stance: 1, aim: 1, speed: 0, yaw: s.extraction.heliYaw + Math.PI / 2, sinceShot: 0 })
+      return
+    }
     if (this.greet !== 'done' && this.greeting(s, o, dt)) return
     if (this.ride(s, o)) {
       // in the vehicle: no walking, just pick targets and shoot from the seat / truck bed

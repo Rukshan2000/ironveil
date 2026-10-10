@@ -1,4 +1,4 @@
-import type { BoxDef, InteriorDef, MaterialKey } from './types'
+import type { BoxDef, InteriorDef, MaterialKey, LadderDef } from './types'
 
 type Side = 'n' | 's' | 'e' | 'w'
 type V3 = [number, number, number]
@@ -201,6 +201,12 @@ export function tower(x: number, z: number, height = 6, yaw = 0): BoxDef[] {
   }
   for (let y = 0.4; y < height; y += 0.4) parts.push(box([2.2, y, 0], [0.04, 0.04, 0.5], 'metal', { collide: false, castShadow: false }))
   return place(parts, x, z, yaw)
+}
+
+/** The climbable ladder of a `tower(x, z, height, yaw)`: foot of the ladder outside, step-off onto the platform. */
+export function towerLadder(x: number, z: number, height: number, yaw = 0): LadderDef {
+  const at = (lx: number, y: number): [number, number, number] => [x + lx * Math.cos(yaw), y, z - lx * Math.sin(yaw)]
+  return { bottom: at(2.75, 0), top: at(0.9, height + 0.13) }
 }
 
 /** Straight staircase rising along local -Z from (x, z). Each step is climbable by the character controller's autostep. */
